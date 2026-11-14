@@ -1,17 +1,20 @@
 name: 5분 점검
+# 한 번 시작하면 약 5시간 40분 동안 5분 간격으로 점검을 반복하고, 끝나면 대기 중이던 다음 실행이 이어받음.
+# 깃허브 예약 실행은 자주 늦어지므로, 예약은 「끊겼을 때 다시 살리는 용도」로만 씀.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 concurrency:
-  group: bot
+  group: fast-loop
   cancel-in-progress: false
 permissions:
   contents: write
+  actions: write
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,12 +26,31 @@ jobs:
         with: { ref: live, path: live }
       - uses: actions/checkout@v4
         with: { ref: state, path: state }
-      - name: 시세 · 알림 · 공시 점검
+      - name: 시세 · 알림 · 공시 점검 (반복)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ github.token }}
           APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-        run: python3 bot/bot.py fast
-      - name: 결과 저장
-        run: bash bot/publish.sh "5분 점검"
+        run: |
+          end=$(( $(date +%s) + 340*60 ))
+          while [ $(date +%s) -lt $end ]; do
+            t0=$(date +%s)
+            git fetch -q origin main && git reset -q --hard FETCH_HEAD || true
+            git -C live fetch -q origin live && git -C live reset -q --hard FETCH_HEAD && git -C live clean -fdq || true
+            git -C state fetch -q origin state && git -C state reset -q --hard FETCH_HEAD || true
+            seen=$(git -C state rev-parse HEAD)
+            timeout 600 python3 bot/bot.py fast || echo "이번 회차 실패 — 다음 회차에 다시 시도"
+            bash bot/publish.sh "5분 점검" || true
+            # 다음 회차까지 대기. 그 사이 내 기록(종목 추가 등)이 바뀌면 바로 다음 회차 시작
+            while [ $(( $(date +%s) - t0 )) -lt 300 ] && [ $(date +%s) -lt $end ]; do
+              sleep 20
+              git -C state fetch -q origin state 2>/dev/null || continue
+              [ "$(git -C state rev-parse FETCH_HEAD)" != "$seen" ] && break
+            done
+          done
+      - name: 다음 실행 이어 붙이기
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh api -X POST "repos/${{ github.repository }}/actions/workflows/fast.yml/dispatches" -f ref=main || true

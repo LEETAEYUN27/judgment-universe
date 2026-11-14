@@ -11,7 +11,7 @@ on:
         type: boolean
         default: false
 concurrency:
-  group: bot
+  group: daily
   cancel-in-progress: false
 permissions:
   contents: write
@@ -36,9 +36,11 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ github.token }}
           APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: python3 bot/bot.py daily ${{ (github.event.schedule == '30 2 * * 0' || inputs.all) && '--all' || '' }}
       - name: 결과 저장
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
         run: bash bot/publish.sh "장 마감 정리"
       - name: 예약 실행 유지 (60일 무활동 자동 중지 방지)
         env: { GH_TOKEN: "${{ github.token }}" }
