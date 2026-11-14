@@ -129,7 +129,7 @@ def quote(sym):
         j = json.loads(get(f"https://m.stock.naver.com/api/stock/{sym[:6]}/basic")); p = num(j["closePrice"]); r = num(j.get("fluctuationsRatio", 0)) / 100
         return {"p": p, "chg": r, "open": j.get("marketStatus") == "OPEN", "day": int(time.strftime("%Y%m%d", time.gmtime(now + 9 * 3600)))}
     if sym in NAVER_IX:
-        j = json.loads(get(NAVER_IX[sym])); p = num(j["closePrice"]); r = num(j.get("fluctuationsRatio", 0)) / 100
+        j = json.loads(get(NAVER_IX[sym])); j = j.get("exchangeInfo") or j; p = num(j["closePrice"]); r = num(j.get("fluctuationsRatio", 0)) / 100
         return {"p": p, "chg": r, "open": j.get("marketStatus") == "OPEN", "day": int(time.strftime("%Y%m%d", time.gmtime(now - 5 * 3600 if sym in ("^GSPC", "^IXIC", "^SOX", "^VIX") else now + 9 * 3600)))}
     if not re.fullmatch(r"[A-Z.]{1,6}", sym): raise RuntimeError("현재가 조회 실패: " + sym)
     for ac in ("stocks", "etf"):
