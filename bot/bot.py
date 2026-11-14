@@ -271,6 +271,7 @@ def calendar(watch, known, FU):
     cal.sort(key=lambda x: x["d"]); return cal
 
 MARKET_Q = [("stock market today Wall Street", False), ("Federal Reserve inflation interest rates", False), ("AI data center semiconductor stocks", False), ("US politics regulation tech stocks", False), ("oil geopolitics markets", False), ("미국 증시 마감", True), ("코스피 반도체 외국인", True)]
+MKN = {"^GSPC": "S&P500 지수", "^IXIC": "나스닥 종합지수", "^SOX": "필라델피아 반도체지수(SOX)", "^VIX": "VIX 변동성지수", "^TNX": "미국 10년물 국채금리", "CL=F": "WTI 유가", "KRW=X": "원/달러 환율", "^KS11": "코스피", "QQQ": "QQQ(나스닥100 ETF)"}
 def issues(watch, known, D, FU, mk):
     heads = []; n = 0
     for h in market_feeds(): n += 1; heads.append({"i": n, "t": h["t"], "src": h["src"], "u": h["u"], "at": h["at"], "d": h.get("d") or ""})
@@ -281,7 +282,7 @@ def issues(watch, known, D, FU, mk):
     prompt = f"""오늘은 {kst_day()} (한국 시간). 아래는 최근 기사 제목 목록과 시장 수치임. 미국 주식시장, 기술주·AI·반도체 섹터, 그리고 모니터링 종목에 영향을 줄 수 있는 이슈만 골라 5~8개로 정리할 것. 여러 기사가 다루는 굵직한 사안을 우선하고, 기사 한 건짜리 사소한 내용이나 개별 종목의 단순 등락 보도는 넣지 말 것. 본문(body)과 요약(brief)에는 기사 번호를 쓰지 말 것 (번호는 src 에만).
 
 모니터링 종목 : {wl}
-시장 수치 : {json.dumps(mk, ensure_ascii=False)}
+시장 수치 (이름을 바꿔 부르지 말 것) : {json.dumps({MKN.get(k, k): v for k, v in mk.items()}, ensure_ascii=False)}
 기존 이슈(같은 주제면 id 를 그대로 재사용) : {json.dumps(old, ensure_ascii=False)}
 
 기사 제목 :
