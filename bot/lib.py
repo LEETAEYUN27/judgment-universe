@@ -60,6 +60,29 @@ def us_name(sym):
         try: return json.loads(get(f"https://api.nasdaq.com/api/quote/{sym.replace('.', '-')}/info?assetclass={ac}", 12))["data"]["companyName"]
         except Exception: continue
     return None
+
+# ───── 달러지수 · 비트코인 : 야후가 막힐 때 쓰는 대체 출처 ─────
+def dxy_calc(r):
+    """ICE 달러지수 산식. r = 1달러당 각 통화 값 (유럽중앙은행 고시 환율, 하루 1회)"""
+    return 50.14348112 * (1 / r["EUR"]) ** -0.576 * r["JPY"] ** 0.136 * (1 / r["GBP"]) ** -0.119 * r["CAD"] ** 0.091 * r["SEK"] ** 0.042 * r["CHF"] ** 0.036
+def dxy_hist(days=90):
+    a = time.strftime("%Y-%m-%d", time.gmtime(time.time() - days * 86400))
+    j = json.loads(get(f"https://api.frankfurter.app/{a}..?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF", 20)); rows = []
+    for d in sorted(j["rates"]):
+        v = round(dxy_calc(j["rates"][d]), 3); rows.append([int(d.replace("-", "")), v, v, v, v, 0])
+    return rows
+def btc_hist(days=300):
+    j = json.loads(get("https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=86400", 20)); rows = []
+    for t, lo, hi, op, cl, vol in sorted(j)[-days:]: rows.append([ymd(t, 0), op, hi, lo, cl, int(vol)])
+    return rows
+def alt_quote(sym):
+    now = time.time(); day = int(time.strftime("%Y%m%d", time.gmtime(now)))
+    if sym == "BTC-USD":
+        j = json.loads(get("https://api.exchange.coinbase.com/products/BTC-USD/stats", 12)); p = float(j["last"]); o = float(j["open"])
+        return {"p": p, "chg": p / o - 1, "open": True, "day": day}
+    if sym == "DX-Y.NYB":
+        r = dxy_hist(12); return {"p": r[-1][4], "chg": r[-1][4] / r[-2][4] - 1, "open": False, "day": r[-1][0]}
+    return None
 def prices(sym, days):
     """일봉 [[YYYYMMDD,o,h,l,c,v]...] 과 이름·통화. 야후 우선, 막히면 네이버(한국)·나스닥(미국)."""
     try:
@@ -69,6 +92,8 @@ def prices(sym, days):
     if is_kr(sym): rows = naver_hist(sym[:6], days)
     elif re.fullmatch(r"[A-Z.]{1,6}", sym): rows = nasdaq_hist(sym.replace(".", "-"), days)
     elif sym in NAVER_IX: rows = naver_ix_hist(sym)
+    elif sym == "DX-Y.NYB": rows = dxy_hist(max(90, min(days, 400)))
+    elif sym == "BTC-USD": rows = btc_hist()
     else: rows = []
     if not rows: raise RuntimeError("시세 출처 모두 실패: " + sym)
     return {"name": sym, "cur": "KRW" if is_kr(sym) else "USD", "src": "alt"}, rows
@@ -131,6 +156,7 @@ def quote(sym):
     if sym in NAVER_IX:
         j = json.loads(get(NAVER_IX[sym])); j = j.get("exchangeInfo") or j; p = num(j["closePrice"]); r = num(j.get("fluctuationsRatio", 0)) / 100
         return {"p": p, "chg": r, "open": j.get("marketStatus") == "OPEN", "day": int(time.strftime("%Y%m%d", time.gmtime(now - 5 * 3600 if sym in ("^GSPC", "^IXIC", "^SOX", "^VIX") else now + 9 * 3600)))}
+    if sym in ("BTC-USD", "DX-Y.NYB"): return alt_quote(sym)
     if not re.fullmatch(r"[A-Z.]{1,6}", sym): raise RuntimeError("현재가 조회 실패: " + sym)
     for ac in ("stocks", "etf"):
         try:

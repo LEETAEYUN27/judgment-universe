@@ -144,7 +144,7 @@
     { k: 'mid', lab: '주의', p: 12.7, p10: 9.6, avg: 1.1, min: -3.4, n: 395 },
     { k: 'hi', lab: '경계', p: 22.1, p10: 12.9, avg: 1.5, min: -4.0, n: 249 },
     { k: 'max', lab: '위험', p: 33.3, p10: 27.5, avg: -0.5, min: -6.1, n: 189 },
-    { k: 'ext', lab: '극단 · 공포 구간', p: 21.0, p10: 9.9, avg: 4.7, min: -4.0, n: 181 }];
+    { k: 'ext', lab: '투매 · 바닥권', p: 21.0, p10: 9.9, avg: 4.7, min: -4.0, n: 181 }];
   async function calcRisk() {
     if (!SVok) return;
     try {
@@ -171,12 +171,13 @@
     const td = todayInt(), wk = S.issues.filter(i => i.date >= td - 7), dn = wk.filter(i => i.dir < 0).length, upn = wk.filter(i => i.dir > 0).length;
     return '<div class="risk pad ' + r.k + '"><div class="rh"><div><div class="rk">하락 위험 단계 <small>MARKET THREAT LEVEL</small></div><div class="rv"><b class="num">' + r.p.toFixed(0) + '<i>%</i></b><em>' + r.lab + '</em></div></div><div class="rt">' + (r.at ? new Date(r.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + ' 시세 기준<br>5분 간격 재계산' : '') + '</div></div>' +
       '<div class="rcells">' + RISK_TBL.map((t, i) => '<span class="' + (i === r.lv ? 'on ' : i < r.lv ? 'past ' : '') + t.k + '"><b>' + t.p.toFixed(0) + '%</b>' + t.lab.split(' ')[0] + '</span>').join('') + '</div>' +
+      '<p class="rwhy">※ 마지막 칸이 33%보다 낮은 이유 : 조건 5개가 모두 켜진 날은 이미 크게 빠진 뒤의 투매 구간이라, 추가 급락은 줄고(21%) 20일 뒤 평균 +4.7% 반등했습니다. 가장 위험한 때는 조건 4개인 「위험」 단계입니다.</p>' +
       '<p class="rdesc">과거 같은 단계였던 ' + r.n.toLocaleString() + '일 가운데 <b>' + r.p.toFixed(0) + '%</b>에서, 이후 20거래일 안에 나스닥이 그날 종가보다 <b>8% 넘게 더</b> 내려갔습니다 (평소 10%). 10% 넘게 내려간 비율은 ' + r.p10.toFixed(0) + '%, 20거래일 뒤 평균 수익률은 <b class="' + cls(r.avg) + '">' + (r.avg > 0 ? '+' : '') + r.avg.toFixed(1) + '%</b> 였습니다.</p>' +
       '<div class="rconds">' + r.conds.map(c => '<div class="rc' + (c[1] ? ' on' : '') + '"><i></i><span>' + c[0] + '</span><em>' + esc(c[2]) + '</em></div>').join('') + '</div>' +
       '<div class="rnews">최근 1주 자동 수집 이슈 : 하방 ' + dn + '건 · 상방 ' + upn + '건 <small>(단계 계산에는 넣지 않음)</small></div>' +
       '<details class="more"><summary>백테스트 근거와 한계 보기</summary><div class="rtbl"><div class="h"><span>단계 (충족 조건 수)</span><span>8% 추가 하락</span><span>20일 평균</span><span>표본</span></div>' + RISK_TBL.map((t, i) => '<div class="' + (i === r.lv ? 'cur' : '') + '"><span>' + t.lab + ' (' + ['0', '1', '2~3', '4', '5'][i] + '개)</span><span>' + t.p.toFixed(1) + '%</span><span class="' + cls(t.avg) + '">' + (t.avg > 0 ? '+' : '') + t.avg.toFixed(1) + '%</span><span>' + t.n.toLocaleString() + '일</span></div>').join('') + '</div>' +
       '<p class="note" style="margin-top:10px">2014년 11월 ~ 2026년 10월 나스닥 2,998거래일 기준입니다. 요인 14개에 최적 가중치를 주는 방식도 시험했으나, 학습에 쓰지 않은 기간에서는 맞히지 못해(판별력 0.47, 0.5가 동전 던지기) 버렸습니다. 대신 기간을 나눠도 방향이 유지된 조건 5개의 충족 개수만 씁니다. 조건이 하나도 없을 때의 추가 급락 비율은 전반기 4.6% · 후반기 6.1%로 안정적이었으나, 2개 이상 구간은 시기별 편차가 큽니다 (예 : 4개 충족 시 전반기 24% · 후반기 41%).</p>' +
-      '<p class="note" style="margin-top:6px"><b>읽는 법</b> : 단계가 오르면 「더 크게 빠질 가능성」이 평소의 2~3배로 커진다는 뜻이지, 반드시 빠진다는 뜻이 아닙니다. 위험 단계에서도 3번 중 2번은 8% 추가 하락이 없었고, 5개가 모두 켜진 극단 구간은 오히려 20일 뒤 평균 +4.7%로 반등이 많았습니다. 손절 여부는 이 확률과 보유 종목의 사정을 함께 놓고 직접 판단하십시오.</p></details></div>';
+      '<p class="note" style="margin-top:6px"><b>읽는 법</b> : 단계가 오르면 「더 크게 빠질 가능성」이 평소의 2~3배로 커진다는 뜻이지, 반드시 빠진다는 뜻이 아닙니다. 위험 단계에서도 3번 중 2번은 8% 추가 하락이 없었고, 5개가 모두 켜진 조건 5개가 모두 켜진 투매 구간은 오히려 20일 뒤 평균 +4.7%로 반등이 많았습니다. 손절 여부는 이 확률과 보유 종목의 사정을 함께 놓고 직접 판단하십시오.</p></details></div>';
   }
   const Live = { mcp: null };
   function liveUI() {
@@ -239,43 +240,74 @@
   /* 가격 차트 */
   function drawChart(cv, H, o) {
     const { g, w, h } = prep(cv), n = H.c.length, bars = Math.min(o.bars || 252, n), i0 = n - bars, I = SV.indicators(H);
-    const up = css('--up'), dn = css('--down'), ink3 = css('--ink3'), line = css('--line'), ink = css('--ink'), acc = css('--accent');
-    const padR = 54, padT = 22, padB = 20, vh = Math.round(h * 0.15), ph = h - padT - padB - vh - 6, pw = w - padR - 6;
-    let mn = Infinity, mx = -Infinity, vmx = 0;
-    for (let i = i0; i < n; i++) { if (H.l[i] < mn) mn = H.l[i]; if (H.h[i] > mx) mx = H.h[i]; if (H.v[i] > vmx) vmx = H.v[i]; }
+    const up = css('--up'), dn = css('--down'), ink3 = css('--ink3'), line = css('--line'), ink = css('--ink'), acc = css('--accent'), bg = css('--bg');
+    const MONO = '"JetBrains Mono", ui-monospace, monospace', KR = '"IBM Plex Sans KR", "Noto Sans KR", sans-serif';
+    const padR = 56, padT = 30, padB = 20, vh = Math.round(h * 0.13), rail = bars > 130 ? 12 : 0, ph = h - padT - padB - vh - rail - 8, pw = w - padR - 6, pb = padT + ph;
+    let mn = Infinity, mx = -Infinity, vmx = 0, iHi = i0, iLo = i0;
+    for (let i = i0; i < n; i++) { if (H.l[i] < mn) { mn = H.l[i]; iLo = i; } if (H.h[i] > mx) { mx = H.h[i]; iHi = i; } if (H.v[i] > vmx) vmx = H.v[i]; }
+    const pHi = mx, pLo = mn;
     (o.lines || []).forEach(L => { if (L.y > mn * 0.75 && L.y < mx * 1.25) { mn = Math.min(mn, L.y); mx = Math.max(mx, L.y); } });
-    const pad = (mx - mn) * 0.06 || 1; mn -= pad; mx += pad;
-    const X = i => 6 + (i - i0 + 0.5) / bars * pw, Y = v => padT + (1 - (v - mn) / (mx - mn)) * ph;
-    g.font = '10.5px Manrope, sans-serif'; g.textBaseline = 'middle';
-    for (let k = 0; k <= 4; k++) { const v = mn + (mx - mn) * k / 4, y = Y(v); g.strokeStyle = line; g.lineWidth = 1; g.beginPath(); g.moveTo(6, y + .5); g.lineTo(6 + pw, y + .5); g.stroke(); g.fillStyle = ink3; g.textAlign = 'left'; g.fillText(shortNum(v, o.sym), w - padR + 6, y); }
-    // 날짜 눈금
-    g.textAlign = 'center'; g.fillStyle = ink3; const step = Math.max(1, Math.floor(bars / 4));
-    for (let i = i0 + Math.floor(step / 2); i < n; i += step) g.fillText(bars > 400 ? String(H.d[i]).slice(2, 4) + '. ' + (+String(H.d[i]).slice(4, 6)) : SV.fmtDateShort(H.d[i]), X(i), h - 9);
+    const LOG = pLo > 0 && pHi / pLo > 6, T = LOG ? Math.log : (v => v), TI = LOG ? Math.exp : (v => v);
+    let tn = T(mn), tx = T(mx); const pad = (tx - tn) * 0.09 || 1; tn -= pad; tx += pad; if (!LOG && tn < 0 && pLo >= 0) tn = 0; mn = TI(tn); mx = TI(tx);
+    const X = i => 6 + (i - i0 + 0.5) / bars * pw, Y = v => padT + (1 - (T(Math.max(v, mn)) - tn) / (tx - tn)) * ph;
+    const last = o.live || H.c[n - 1], first = H.c[i0], ret = last / first - 1, tone = ret >= 0 ? up : dn;
+    // 바탕 : 점선 격자 + 세로 구획
+    g.font = '10px ' + MONO; g.textBaseline = 'middle'; g.lineWidth = 1;
+    for (let k = 0; k <= 4; k++) { const v = TI(tn + (tx - tn) * k / 4), y = Math.round(Y(v)) + .5; g.setLineDash([1, 5]); g.strokeStyle = hexA(ink3, 0.55); g.beginPath(); g.moveTo(6, y); g.lineTo(6 + pw, y); g.stroke(); g.setLineDash([]); g.fillStyle = ink3; g.textAlign = 'left'; g.fillText(shortNum(v, o.sym), w - padR + 8, y); }
+    g.textAlign = 'center'; const step = Math.max(1, Math.floor(bars / 4));
+    for (let i = i0 + Math.floor(step / 2); i < n; i += step) { const x = Math.round(X(i)) + .5; g.strokeStyle = hexA(line, 0.9); g.beginPath(); g.moveTo(x, padT); g.lineTo(x, h - padB); g.stroke(); g.fillStyle = ink3; g.fillText(bars > 400 ? "'" + String(H.d[i]).slice(2, 4) + '.' + String(H.d[i]).slice(4, 6) : SV.fmtDateShort(H.d[i]), x, h - 9); }
     // 거래량
-    const bw = Math.max(1, pw / bars * 0.7), vy = h - padB;
-    for (let i = i0; i < n; i++) { const u = H.c[i] >= (i ? H.c[i - 1] : H.o[i]); g.fillStyle = hexA(u ? up : dn, 0.28); const bh = vmx ? H.v[i] / vmx * vh : 0; g.fillRect(X(i) - bw / 2, vy - bh, bw, bh); }
+    const vy = h - padB, vt = vy - vh;
+    if (bars <= 130) { const bw = Math.max(1, pw / bars * 0.7); for (let i = i0; i < n; i++) { const u = H.c[i] >= (i ? H.c[i - 1] : H.o[i]); g.fillStyle = hexA(u ? up : dn, 0.3); const bh = vmx ? H.v[i] / vmx * vh : 0; g.fillRect(X(i) - bw / 2, vy - bh, bw, bh); } }
+    else {
+      const cols = Math.floor(pw / 3), per = bars / cols; let cm = 0; const vs = [];
+      for (let c = 0; c < cols; c++) { const a = i0 + Math.floor(c * per), b = Math.max(a + 1, i0 + Math.floor((c + 1) * per)); let s = 0; for (let i = a; i < b && i < n; i++) s += H.v[i]; s /= (b - a); vs.push([s, H.c[Math.min(n - 1, b - 1)] >= H.c[a]]); if (s > cm) cm = s; }
+      vs.forEach(([s, u], c) => { const bh = cm ? s / cm * vh : 0; g.fillStyle = hexA(u ? up : dn, 0.26); g.fillRect(6 + c * 3, vy - bh, 2, bh); });
+    }
+    g.fillStyle = ink3; g.textAlign = 'left'; g.font = '8.5px ' + MONO; g.fillText('VOL', 8, vt + 5); g.font = '10px ' + MONO;
     // 가격
     if (bars <= 130) {
+      const bw = Math.max(1, pw / bars * 0.7);
       for (let i = i0; i < n; i++) { const u = H.c[i] >= H.o[i], col = u ? up : dn; g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(X(i), Y(H.h[i])); g.lineTo(X(i), Y(H.l[i])); g.stroke(); const y1 = Y(Math.max(H.o[i], H.c[i])), y2 = Y(Math.min(H.o[i], H.c[i])); g.fillRect(X(i) - bw / 2, y1, bw, Math.max(1, y2 - y1)); }
     } else {
-      g.beginPath(); for (let i = i0; i < n; i++) i === i0 ? g.moveTo(X(i), Y(H.c[i])) : g.lineTo(X(i), Y(H.c[i]));
-      g.strokeStyle = ink; g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
-      g.lineTo(X(n - 1), padT + ph); g.lineTo(X(i0), padT + ph); g.closePath(); const gr = g.createLinearGradient(0, padT, 0, padT + ph); gr.addColorStop(0, hexA(acc, 0.16)); gr.addColorStop(1, hexA(acc, 0)); g.fillStyle = gr; g.fill();
+      // 화소 단위로 묶어 고가-저가 띠와 종가 선을 그림 (긴 기간에서도 뭉개지지 않음)
+      const cols = Math.max(40, Math.floor(pw / 1.5)), per = bars / cols, P = [];
+      for (let c = 0; c < cols; c++) { const a = i0 + Math.floor(c * per), b = Math.min(n, Math.max(a + 1, i0 + Math.floor((c + 1) * per))); let hi = -Infinity, lo = Infinity; for (let i = a; i < b; i++) { if (H.h[i] > hi) hi = H.h[i]; if (H.l[i] < lo) lo = H.l[i]; } P.push({ x: 6 + (c + 0.5) / cols * pw, hi, lo, c: H.c[b - 1] }); }
+      P[P.length - 1].c = last;
+      g.beginPath(); P.forEach((p, k) => k ? g.lineTo(p.x, Y(p.hi)) : g.moveTo(p.x, Y(p.hi))); for (let k = P.length - 1; k >= 0; k--) g.lineTo(P[k].x, Y(P[k].lo)); g.closePath(); g.fillStyle = hexA(tone, 0.10); g.fill();
+      const path = () => { g.beginPath(); P.forEach((p, k) => k ? g.lineTo(p.x, Y(p.c)) : g.moveTo(p.x, Y(p.c))); };
+      path(); g.lineTo(P[P.length - 1].x, pb); g.lineTo(P[0].x, pb); g.closePath(); const gr = g.createLinearGradient(0, padT, 0, pb); gr.addColorStop(0, hexA(tone, 0.30)); gr.addColorStop(0.55, hexA(tone, 0.07)); gr.addColorStop(1, hexA(tone, 0)); g.fillStyle = gr; g.fill();
+      // 시작가 기준선
+      const yb = Math.round(Y(first)) + .5; g.setLineDash([3, 4]); g.strokeStyle = hexA(ink, 0.28); g.beginPath(); g.moveTo(6, yb); g.lineTo(6 + pw, yb); g.stroke(); g.setLineDash([]);
+      g.save(); g.lineJoin = 'round'; g.lineCap = 'round'; path(); g.shadowColor = tone; g.shadowBlur = 14; g.strokeStyle = hexA(tone, 0.55); g.lineWidth = 3.2; g.stroke(); g.shadowBlur = 0; path(); g.strokeStyle = '#FFFFFF'; g.lineWidth = 1.25; g.stroke(); g.restore();
     }
     // 이동평균선
-    [['m20', '#E8A317'], ['m60', '#8B5CF6'], ['m200', '#14B8A6']].forEach(([k, col]) => { g.beginPath(); let st = false; for (let i = i0; i < n; i++) { const v = I[k][i]; if (!Number.isFinite(v)) continue; st ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); st = true; } g.strokeStyle = col; g.lineWidth = 1.1; g.stroke(); });
+    [['m20', '#E8A317', []], ['m60', '#8B5CF6', []], ['m200', '#14B8A6', [5, 3]]].forEach(([k, col, dash]) => { if (bars > 800 && k === 'm20') return; g.beginPath(); let st = false; const stp = Math.max(1, Math.floor(bars / pw)); for (let i = i0; i < n; i += stp) { const v = I[k][i]; if (!Number.isFinite(v)) continue; st ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); st = true; } g.setLineDash(dash); g.strokeStyle = hexA(col, bars > 130 ? 0.75 : 0.95); g.lineWidth = 1; g.stroke(); g.setLineDash([]); });
     // 알림 가격선
-    (o.lines || []).forEach(L => { if (L.y < mn || L.y > mx) return; const y = Y(L.y); g.setLineDash([5, 4]); g.strokeStyle = L.color; g.lineWidth = 1.2; g.beginPath(); g.moveTo(6, y); g.lineTo(6 + pw, y); g.stroke(); g.setLineDash([]); g.fillStyle = L.color; g.textAlign = 'left'; g.font = '700 10px Noto Sans KR, sans-serif'; g.fillText(L.label, 10, y - 8); g.font = '10.5px Manrope, sans-serif'; });
-    // 표시 : 급등락 · 가상 매매
+    (o.lines || []).forEach(L => { if (L.y < mn || L.y > mx) return; const y = Y(L.y); g.setLineDash([6, 4]); g.strokeStyle = L.color; g.lineWidth = 1.2; g.beginPath(); g.moveTo(6, y); g.lineTo(6 + pw, y); g.stroke(); g.setLineDash([]); g.fillStyle = L.color; g.textAlign = 'left'; g.font = '700 10px ' + KR; g.fillText(L.label, 10, y - 8); g.font = '10px ' + MONO; });
+    // 고점 · 저점 표지
+    const tag = (i, v, hiSide) => {
+      const x = X(i), y = Y(v), txt = (hiSide ? '고 ' : '저 ') + shortNum(v, o.sym) + '  ' + (bars > 200 ? "'" + String(H.d[i]).slice(2, 4) + '.' + String(H.d[i]).slice(4, 6) + '.' + String(H.d[i]).slice(6, 8) : SV.fmtDateShort(H.d[i])); g.font = '700 9.5px ' + MONO; const tw = g.measureText(txt).width + 12, right = x + 10 + tw < 6 + pw, bx = right ? x + 9 : x - 9 - tw, by = Math.max(padT - 4, Math.min(pb - 15, hiSide ? y - 17 : y + 5)), col = hiSide ? up : dn;
+      g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(right ? bx : bx + tw, by + 6); g.stroke();
+      g.save(); g.translate(x, y); g.rotate(Math.PI / 4); g.fillStyle = bg; g.fillRect(-3.5, -3.5, 7, 7); g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(-3.5, -3.5, 7, 7); g.restore();
+      g.fillStyle = hexA(bg, 0.86); g.fillRect(bx, by, tw, 13); g.strokeStyle = hexA(col, 0.8); g.strokeRect(bx + .5, by + .5, tw - 1, 12); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, bx + 6, by + 7); g.font = '10px ' + MONO;
+    };
+    tag(iHi, pHi, true); tag(iLo, pLo, false);
+    // 표시 : 급등락 (긴 기간은 아래 띠에 눈금으로) · 가상 매매
+    if (rail) { g.fillStyle = hexA(line, 0.5); g.fillRect(6, pb + 4, pw, rail - 4); g.fillStyle = ink3; g.font = '8.5px ' + MONO; g.textAlign = 'left'; g.fillText('±5%', 8, pb + 4 + (rail - 4) / 2 + .5); g.font = '10px ' + MONO; }
     (o.marks || []).forEach(m => { const i = SV.at(H, m.d); if (i < i0 || i < 0) return; const x = X(i);
-      if (m.type === 'move') { g.beginPath(); g.arc(x, Y(H.c[i]), 3.2, 0, 7); g.fillStyle = m.pct > 0 ? up : dn; g.fill(); g.strokeStyle = css('--surface'); g.lineWidth = 1.5; g.stroke(); }
-      else { const buy = m.type === 'buy', y = buy ? Y(H.l[i]) + 9 : Y(H.h[i]) - 9; g.beginPath(); if (buy) { g.moveTo(x, y - 6); g.lineTo(x - 5.5, y + 4); g.lineTo(x + 5.5, y + 4); } else { g.moveTo(x, y + 6); g.lineTo(x - 5.5, y - 4); g.lineTo(x + 5.5, y - 4); } g.closePath(); g.fillStyle = acc; g.fill(); } });
+      if (m.type === 'move') { const col = m.pct > 0 ? up : dn; if (rail) { const bh = Math.min(rail - 4, 3 + Math.abs(m.pct) * 40); g.fillStyle = col; g.fillRect(Math.round(x) - .5, pb + rail - bh, 1.5, bh); } else { g.beginPath(); g.arc(x, Y(H.c[i]), 3, 0, 7); g.fillStyle = col; g.fill(); g.strokeStyle = bg; g.lineWidth = 1.5; g.stroke(); } }
+      else { const buy = m.type === 'buy', y = buy ? Y(H.l[i]) + 10 : Y(H.h[i]) - 10; g.save(); g.shadowColor = acc; g.shadowBlur = 8; g.beginPath(); if (buy) { g.moveTo(x, y - 6); g.lineTo(x - 5.5, y + 4); g.lineTo(x + 5.5, y + 4); } else { g.moveTo(x, y + 6); g.lineTo(x - 5.5, y - 4); g.lineTo(x + 5.5, y - 4); } g.closePath(); g.fillStyle = acc; g.fill(); g.restore(); } });
+    // 기간 수익률 표지
+    { const lab = bars >= n || bars > 2400 ? '전체' : bars > 700 ? '3년' : bars > 200 ? '1년' : '3개월', txt = lab + ' ' + SV.pct(ret, 1); g.font = '800 11px ' + MONO; const tw = g.measureText(txt).width + 16; g.fillStyle = hexA(tone, 0.16); g.fillRect(6, 4, tw, 18); g.fillStyle = tone; g.fillRect(6, 4, 2, 18); g.textAlign = 'left'; g.fillText(txt, 15, 13.5);
+      g.font = '9px ' + MONO; g.fillStyle = ink3; const dl = d => bars > 200 ? String(d).slice(0, 4) + '. ' + (+String(d).slice(4, 6)) + '.' : SV.fmtDateShort(d); g.fillText(dl(H.d[i0]) + ' → ' + dl(H.d[n - 1]) + (LOG ? '  · 로그 눈금' : ''), 6 + tw + 8, 13.5); g.font = '10px ' + MONO; }
     // 마지막 가격
-    const last = o.live || H.c[n - 1], yl = Y(Math.max(mn, Math.min(mx, last)));
-    g.setLineDash([2, 3]); g.strokeStyle = ink3; g.beginPath(); g.moveTo(6, yl); g.lineTo(6 + pw, yl); g.stroke(); g.setLineDash([]);
-    g.fillStyle = ink; roundRect(g, w - padR + 2, yl - 9, padR - 4, 18, 4); g.fill(); g.fillStyle = css('--surface'); g.textAlign = 'center'; g.font = '700 10.5px Manrope, sans-serif'; g.fillText(shortNum(last, o.sym), w - padR / 2, yl + .5);
+    const yl = Y(Math.max(mn, Math.min(mx, last)));
+    g.setLineDash([2, 3]); g.strokeStyle = hexA(tone, 0.7); g.beginPath(); g.moveTo(6, yl); g.lineTo(6 + pw, yl); g.stroke(); g.setLineDash([]);
+    { const xl = bars > 130 ? 6 + pw - pw / Math.max(40, Math.floor(pw / 1.5)) / 2 : X(n - 1); g.beginPath(); g.arc(xl, yl, 7, 0, 7); g.fillStyle = hexA(tone, 0.22); g.fill(); g.beginPath(); g.arc(xl, yl, 3, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = tone; g.lineWidth = 1.5; g.stroke(); }
+    g.fillStyle = tone; g.beginPath(); g.moveTo(w - padR + 2, yl); g.lineTo(w - padR + 8, yl - 9); g.lineTo(w - 2, yl - 9); g.lineTo(w - 2, yl + 9); g.lineTo(w - padR + 8, yl + 9); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '700 10px ' + MONO; g.fillText(shortNum(last, o.sym), w - padR / 2 + 3, yl + .5);
     // 십자선
-    if (o.hover != null) { const i = Math.max(i0, Math.min(n - 1, i0 + Math.floor((o.hover - 6) / pw * bars))); g.strokeStyle = hexA(ink, 0.35); g.lineWidth = 1; g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), vy); g.stroke(); g.beginPath(); g.arc(X(i), Y(H.c[i]), 3.5, 0, 7); g.fillStyle = acc; g.fill(); return i; }
+    if (o.hover != null) { const i = Math.max(i0, Math.min(n - 1, i0 + Math.floor((o.hover - 6) / pw * bars))), x = Math.round(X(i)) + .5, y = Math.round(Y(H.c[i])) + .5; g.strokeStyle = hexA(acc, 0.7); g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x, padT); g.lineTo(x, vy); g.moveTo(6, y); g.lineTo(6 + pw, y); g.stroke(); g.setLineDash([]); g.beginPath(); g.arc(x, y, 4, 0, 7); g.fillStyle = acc; g.fill(); g.strokeStyle = bg; g.lineWidth = 1.5; g.stroke(); return i; }
     return null;
   }
   function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
