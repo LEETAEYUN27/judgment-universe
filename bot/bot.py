@@ -187,6 +187,19 @@ def ko_names(ext):
         if v and re.search(r"[가-힣]", v) and len(v) <= 24: x["k"] = v
     return True
 
+def kick_daily(F):
+    """깃허브 예약 실행이 돌지 않아도 장 마감 정리가 빠지지 않게, 정해진 시각이 지나면 5분 점검이 직접 실행을 요청함 (UTC 기준 평일 21:40 · 06:50, 일요일 02:30 전체)"""
+    repo = os.environ.get("GITHUB_REPOSITORY"); tok = os.environ.get("GITHUB_TOKEN")
+    if not repo or not tok: return
+    g = time.gmtime(); mins = g.tm_hour * 60 + g.tm_min; slot = None
+    for hm, days, full in ((21 * 60 + 40, range(0, 5), False), (6 * 60 + 50, range(0, 5), False), (2 * 60 + 30, (6,), True)):
+        if g.tm_wday in days and 0 <= mins - hm < 90: slot = (time.strftime("%Y%m%d", g) + "-" + str(hm), full)
+    if not slot or F.get("daily_slot") == slot[0]: return
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/workflows/daily.yml/dispatches", data=json.dumps({"ref": "main", "inputs": {"all": "true" if slot[1] else "false"}}).encode(), headers={"Authorization": "Bearer " + tok, "Accept": "application/vnd.github+json", "User-Agent": "judgment-universe-bot"}, method="POST")
+        urllib.request.urlopen(req, timeout=20).read(); F["daily_slot"] = slot[0]; print("장 마감 정리 실행 요청", slot)
+    except Exception as e: print("장 마감 정리 실행 요청 실패", e)
+
 # ═════ 5분 작업 ═════
 def fast():
     watch, extra, trades = state(); idx, ext, known = index()
@@ -222,8 +235,10 @@ def fast():
         nm = name_of(known, s, w); p = r["p"]; day = r["day"]
         if w.get("buy") and p <= w["buy"]: push({"id": f"{fid(s)}_buy_{day}", "s": s, "kind": "buy", "price": p, "level": w["buy"], "msg": f"{nm} {money(s, p)} — 매수 타점 {money(s, w['buy'])} 도달"}, "매수 타점 도달", "dart", 5)
         if w.get("sell") and p >= w["sell"]: push({"id": f"{fid(s)}_sell_{day}", "s": s, "kind": "sell", "price": p, "level": w["sell"], "msg": f"{nm} {money(s, p)} — 매도 가격 {money(s, w['sell'])} 도달"}, "매도 가격 도달", "moneybag", 5)
-        for th in (0.05, 0.10):
-            if abs(r["chg"]) >= th:
+        hit = [th for th in (0.10, 0.05) if abs(r["chg"]) >= th]
+        for th in hit[:1]:   # 가장 높은 단계 한 번만 알림 (10%를 넘으면 5% 알림은 보낸 것으로 처리)
+            for lo in hit[1:]: ids.add(f"{fid(s)}_move{int(lo * 100)}_{day}")
+            if True:
                 a = {"id": f"{fid(s)}_move{int(th * 100)}_{day}", "s": s, "kind": "move", "price": p, "pct": round(r["chg"], 4), "msg": f"{nm} 장중 {r['chg'] * 100:+.1f}% ({money(s, p)})"}
                 if a["id"] not in ids and not first:
                     und = underlying((known.get(s) or {}).get("n") or ""); hl = feeds(und, und, False, "", None, 8) if und else feeds(s, (known.get(s) or {}).get("n") or s, is_kr(s), (known.get(s) or {}).get("k") or "", None, 8)
@@ -256,6 +271,7 @@ def fast():
             time.sleep(0.2)
         refresh_news(watch, known, FU); F["cons_at"] = int(time.time()); fund_dirty = True
     if fund_dirty: save(os.path.join(LIVE, "fund.json"), FU)
+    kick_daily(F)
     F.update({"at": now_iso(), "q": q, "open": opened, "alerts": alerts[-150:]})
     save(os.path.join(LIVE, "fast.json"), F); print("fast 완료", len(q), "시세", len(alerts), "알림", opened)
 
@@ -316,6 +332,10 @@ def issues(watch, known, D, FU, mk):
 
 def daily(all_syms=False):
     watch, extra, trades = state(); idx, ext, known = index()
+    D = load(os.path.join(LIVE, "daily.json"), {})
+    try: recent = time.time() - (time.mktime(time.strptime(D.get("at", ""), "%Y-%m-%dT%H:%M:%SZ")) - time.timezone) < 40 * 60
+    except Exception: recent = False
+    if recent and os.environ.get("GITHUB_EVENT_NAME") == "schedule": print("40분 안에 이미 정리함 — 예약 실행 생략"); return
     D = load(os.path.join(LIVE, "daily.json"), {}); FU = load(os.path.join(LIVE, "fund.json"), {}); ensure_hist(watch + extra, ext, known)
     active = set(CORE) | {w["s"] for w in watch} | {x["s"] for x in extra}
     tail = dict(D.get("tail") or {}); latest = {}; full = {}; fail = []
