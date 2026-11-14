@@ -1,0 +1,47 @@
+name: 장 마감 정리
+on:
+  schedule:
+    - cron: "40 21 * * 1-5"   # 미국 장 마감 뒤 (한국 시간 06:40)
+    - cron: "50 6 * * 1-5"    # 한국 장 마감 뒤 (한국 시간 15:50)
+    - cron: "30 2 * * 0"      # 일요일 : 전체 종목 일봉 보충
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "전체 종목 갱신"
+        type: boolean
+        default: false
+concurrency:
+  group: bot
+  cancel-in-progress: false
+permissions:
+  contents: write
+  actions: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            bot
+            data/idx.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@v4
+        with: { ref: live, path: live }
+      - uses: actions/checkout@v4
+        with: { ref: state, path: state }
+      - name: 일봉 · 기사 · 이슈 · 일정 정리
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python3 bot/bot.py daily ${{ (github.event.schedule == '30 2 * * 0' || inputs.all) && '--all' || '' }}
+      - name: 결과 저장
+        run: bash bot/publish.sh "장 마감 정리"
+      - name: 예약 실행 유지 (60일 무활동 자동 중지 방지)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/fast.yml/enable" || true
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/daily.yml/enable" || true
