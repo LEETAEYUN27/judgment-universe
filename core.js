@@ -7,6 +7,7 @@
 
   SV.init = async function () {
     const [idx, tail, model] = await Promise.all([fetchJSON(SV.base + 'idx.json'), fetchJSON(SV.base + 'tail.json').catch(() => ({ asof: 0, rows: {} })), fetchJSON(SV.base + 'model.json')]);
+    SV.dipModel = await fetchJSON(SV.base + 'dip.json').catch(() => null);
     SV.idx = idx.list; SV.built = idx.built; SV.tail = tail; SV.model = model;
     SV.idx.forEach(x => { SV.bySym[x.s] = x; });
     return SV;
@@ -89,6 +90,25 @@
   };
   const OPS = { '<=': (a, b) => a <= b, '>=': (a, b) => a >= b, '<': (a, b) => a < b, '>': (a, b) => a > b };
   /* 매수 타점 점수 : 10년 백테스트에서 두 구간 모두 통과한 조합의 충족 여부로 산출 */
+  /* 저점 매수 판정 (60거래일 기준) : 종목 급락 정도 4단계 × 시장 상태 3단계 = 12칸의 과거 결과표에서 지금 칸을 찾음 */
+  SV.dip = function (F, mkt) {
+    const M = SV.dipModel && SV.dipModel[mkt === 'KR' ? 'KR' : 'US']; if (!M || !F || !Number.isFinite(F.dd252) || !Number.isFinite(F.mkdd) || !Number.isFinite(F.rsi)) return null;
+    const sharp = F.ret20 <= -0.15 || F.ret5 <= -0.08 || (F.dd252 <= -0.20 && F.d20 <= -0.07), mild = F.rsi <= 30 || F.bb <= -1;
+    const lv = sharp && F.dd252 <= -0.30 ? 3 : sharp ? 2 : mild ? 1 : 0, ms = F.mkdd <= -0.10 ? 2 : F.mkdd <= -0.05 ? 1 : 0, c = M.tb['' + lv + ms], b = M.base, bh = M.baseH;
+    const why = []; if (F.ret20 <= -0.15) why.push('20일간 ' + SV.pct(F.ret20, 0)); if (F.ret5 <= -0.08) why.push('5일간 ' + SV.pct(F.ret5, 0)); if (F.dd252 <= -0.20 && F.d20 <= -0.07) why.push('20일선 대비 ' + SV.pct(F.d20, 0)); if (!sharp && F.rsi <= 30) why.push('RSI ' + F.rsi.toFixed(0)); if (!sharp && F.bb <= -1) why.push('볼린저 하단 이탈');
+    let k = 'none';
+    if (lv >= 2 && c && c.n >= 300) { if (c.w60 >= b.w60 + 0.03 && c.hw60 >= bh.w60 && c.m60 > b.m60) k = 'good'; else if (c.w60 <= b.w60 - 0.04) k = 'bad'; else k = 'mid'; }
+    return { lv, ms, cell: c, base: b, baseH: bh, k, why, dd: F.dd252, mkdd: F.mkdd, tb: M.tb,
+      lvName: ['평상', '과매도', '급락', '급락 + 깊은 조정'][lv], msName: ['고점 부근', '고점 대비 -5~-10%', '고점 대비 -10% 이하'][ms],
+      label: k === 'good' ? '반등 우위' : k === 'bad' ? '불리 · 떨어지는 칼' : k === 'mid' ? '우위 불분명' : '급락 구간 아님' };
+  };
+  /* 저점 매수 판정용 시장 낙폭 : 미국은 나스닥 종합, 한국은 코스피의 1년 고점 대비 (종가 기준) */
+  SV.dipFor = async function (s, H, F) {
+    const mkt = SV.market(s); let N; try { N = await SV.hist(mkt === 'KR' ? '^KS11' : '^IXIC'); } catch (e) { return null; }
+    const d = H.d[H.d.length - 1]; let j = N.d.length - 1; while (j > 0 && N.d[j] > d) j--;
+    let hi = 0; for (let k = Math.max(0, j - 251); k <= j; k++) if (N.c[k] > hi) hi = N.c[k];
+    return SV.dip(Object.assign({}, F, { mkdd: N.c[j] / hi - 1 }), mkt);
+  };
   SV.scoreFrom = function (F, mkt) {
     const Mo = SV.model[mkt === 'KR' ? 'KR' : 'US'];
     const on = Mo.conds.map(cd => cd.c.every(([k, op, val]) => Number.isFinite(F[k]) && OPS[op](F[k], val)));

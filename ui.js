@@ -212,7 +212,7 @@
       const [H, M] = await Promise.all([SV.hist(s), SV.hist(SV.mkSym(s)).catch(() => null)]);
       const n = H.c.length, c = H.c[n - 1], prev = H.c[n - 2], w = H.c.slice(-252);
       const m = { c, prev, chg: c / prev - 1, d: H.d[n - 1], spark: H.c.slice(-60), hi52: Math.max.apply(null, w), lo52: Math.min.apply(null, w) };
-      if (M && SV.info(s).m !== 'IX') { const r = SV.scoreFrom(SV.features(H, M, n - 1), SV.market(s)); m.score = r; }
+      if (M && SV.info(s).m !== 'IX') { const F = SV.features(H, M, n - 1), r = SV.scoreFrom(F, SV.market(s)); m.score = r; m.dip = await SV.dipFor(s, H, F); }
       S.meta[s] = m;
     } catch (e) { S.meta[s] = { none: true }; }
     loading[s] = false; render();
@@ -389,7 +389,7 @@
     const rows = S.watch.map(w => {
       const m = S.meta[w.s], p = px(w.s), nm = SV.info(w.s) ? SV.name(w.s) : (w.n || w.s);
       const al = (w.buy || w.sell) ? '<span class="al">알림</span>' : '';
-      return '<button class="row" data-open="' + esc(w.s) + '"><div style="min-width:0"><div class="nm">' + esc(nm) + '</div><div class="sy">' + esc(w.s.replace(/\.K[SQ]$/, '')) + al + (m && m.none && !p ? '<span>이력 준비 중</span>' : '') + '</div></div><canvas data-spark="' + esc(w.s) + '"></canvas><div class="px">' + (p ? '<div class="p">' + SV.price(p.p, w.s) + '</div><div class="c ' + cls(p.chg) + '">' + SV.pct(p.chg, 2) + '</div>' : '<div class="p mute">–</div>') + '</div>' + ring(m && m.score) + '</button>';
+      return '<button class="row" data-open="' + esc(w.s) + '"><div style="min-width:0"><div class="nm">' + esc(nm) + '</div><div class="sy">' + esc(w.s.replace(/\.K[SQ]$/, '')) + al + (m && m.dip && m.dip.k === 'good' ? '<span class="dg">저점 우위</span>' : m && m.dip && m.dip.k === 'bad' ? '<span class="db">칼날 주의</span>' : '') + (m && m.none && !p ? '<span>이력 준비 중</span>' : '') + '</div></div><canvas data-spark="' + esc(w.s) + '"></canvas><div class="px">' + (p ? '<div class="p">' + SV.price(p.p, w.s) + '</div><div class="c ' + cls(p.chg) + '">' + SV.pct(p.chg, 2) + '</div>' : '<div class="p mute">–</div>') + '</div>' + ring(m && m.score) + '</button>';
     }).join('');
     if (!$('#q', v)) v.innerHTML = '<div id="wNote"></div><div class="pad"><div class="search"><input id="q" type="search" inputmode="search" enterkeyhint="search" placeholder="종목명 · 티커 · 종목코드 (미국 · 한국 전 종목)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div><div id="qres"></div></div><div id="wList"></div>';
     const qi = $('#q', v); if (document.activeElement !== qi && qi.value !== S.q) qi.value = S.q;
@@ -413,6 +413,8 @@
     S.detail = s;
     let H = null, M = null; try { H = await SV.hist(s); M = await SV.hist(SV.mkSym(s)); } catch (e) { }
     if (S.detail !== s) return;
+    let dipNow = null; try { if (H && M && info && info.m !== 'IX') dipNow = await SV.dipFor(s, H, SV.features(H, M, H.c.length - 1)); } catch (e) { }
+    if (S.detail !== s) return;
     let bars = 252, hover = null, cons = null, consErr = null, consBusy = false, aiBusy = {};
     const inW = () => S.watch.some(x => x.s === s);
     const body = $('#sheetBody');
@@ -424,10 +426,23 @@
         (H ? '<div class="rng">' + [[63, '3개월'], [252, '1년'], [756, '3년'], [9999, '10년']].map(([b, t]) => '<button data-rng="' + b + '" class="' + (bars === b ? 'on' : '') + '">' + t + '</button>').join('') + '</div>' : '') + '</div>';
       if (H) h += '<div class="chartwrap"><canvas id="chart"></canvas><div class="readout" id="readout" hidden></div><div class="pad malegend"><span><i style="background:#E8A317"></i>20일선</span><span><i style="background:#8B5CF6"></i>60일선</span><span><i style="background:#14B8A6"></i>200일선</span><span>● 5% 이상 급등락</span><span>▲▼ 내 가상 매매</span></div></div>';
       else h += '<div class="pad"><div class="banner">이 종목은 아직 가격 이력이 준비되지 않았습니다. 모니터링 목록에 있으면 5~10분 안에 자동으로 준비되어 차트·타점 점수·가상 매매가 열립니다.</div></div>';
+      // 저점 매수 판정 (60거래일)
+      const dp = dipNow;
+      if (dp && dp.cell) {
+        const c = dp.cell, b = dp.base, pc = v => (v * 100).toFixed(0) + '%', mk = SV.market(s) === 'KR' ? '코스피' : '나스닥';
+        const say = dp.k === 'good' ? '과거 같은 상황에서 산 경우, 60거래일 뒤 오른 비율과 수익 폭이 평소보다 뚜렷이 높았습니다. 추세 전환을 확인한 뒤보다 일찍 사는 쪽이 유리했던 구간입니다. 다만 도중 낙폭도 평소보다 큽니다.'
+          : dp.k === 'bad' ? '과거 같은 상황(시장은 멀쩡한데 이 종목만 급락)에서는 60거래일 뒤 오른 비율이 평소보다 낮았습니다. 개별 악재가 이어지는 경우가 많았던 구간입니다.'
+          : dp.k === 'mid' ? '급락 구간이기는 하나, 과거 결과가 평소와 뚜렷이 다르지 않았습니다.' : '지금은 급락 구간이 아닙니다. 아래 수치는 현재 시장 상태에서 평상 종목을 샀을 때의 과거 결과입니다.';
+        h += '<div class="block pad dipb ' + dp.k + '"><h3>저점 매수 판정 <small>60거래일 뒤 기준 · 10년 백테스트</small></h3><div class="dipv"><b>' + dp.label + '</b><span>종목 : ' + dp.lvName + (dp.why.length ? ' (' + esc(dp.why.join(' · ')) + ')' : '') + '<br>시장 : ' + mk + ' ' + dp.msName + ' (' + SV.pct(dp.mkdd, 1) + ')</span></div><p class="note" style="margin:8px 0 10px">' + say + '</p>' +
+          '<div class="kv"><div><div class="k">60일 뒤 상승 비율</div><div class="v">' + pc(c.w60) + ' <small class="mute">평소 ' + pc(b.w60) + '</small></div></div><div><div class="k">60일 수익률 중앙값</div><div class="v ' + cls(c.m60) + '">' + SV.pct(c.m60) + ' <small class="mute">평소 ' + SV.pct(b.m60) + '</small></div></div><div><div class="k">+15% 먼저 / -15% 먼저</div><div class="v" style="font-size:12.5px">' + pc(c.tp) + ' / ' + pc(c.sl) + '</div></div></div>' +
+          '<p class="note" style="margin-top:8px">표본 ' + c.n.toLocaleString() + '건 (2023년 이후 ' + c.hn.toLocaleString() + '건에서는 상승 비율 ' + pc(c.hw60) + '). 60일 안에 겪은 최대 낙폭의 중앙값은 ' + SV.pct(c.mae) + ' (평소 ' + SV.pct(b.mae) + ') 입니다.</p>' +
+          '<details class="more"><summary>12칸 결과표 보기 (60일 뒤 상승 비율)</summary><div class="dipt"><div class="h"><span></span><span>시장 고점 부근</span><span>-5~-10%</span><span>-10% 이하</span></div>' + ['평상', '과매도', '급락', '급락+깊은 조정'].map((nm, l) => '<div><span>' + nm + '</span>' + [0, 1, 2].map(m => { const x = dp.tb['' + l + m]; return '<span class="' + (l === dp.lv && m === dp.ms ? 'on ' : '') + (x.w60 >= b.w60 + 0.03 ? 'g' : x.w60 <= b.w60 - 0.04 ? 'r' : '') + '">' + pc(x.w60) + '<small>' + SV.pct(x.m60, 0) + '</small></span>'; }).join('') + '</div>').join('') + '</div>' +
+          '<p class="note" style="margin-top:8px">큰 숫자는 60거래일 뒤 오른 비율, 작은 숫자는 수익률 중앙값입니다 (평소 ' + pc(b.w60) + ' · ' + SV.pct(b.m60) + '). 급락 = 20일간 -15% 이하, 5일간 -8% 이하, 또는 고점 대비 -20% 이하이면서 20일선보다 7% 넘게 아래. 깊은 조정 = 52주 고점 대비 -30% 이하. 과거 통계이며 수익을 보장하지 않습니다.</p></details></div>';
+      }
       // 타점 점수
       if (sc && sc.valid) {
         const b = sc.bucket, a = Math.PI * (1 - sc.score / 100), gx = 56 + 46 * Math.cos(a), gy = 58 - 46 * Math.sin(a), col = g.k === 'buy' ? 'var(--good)' : g.k === 'avoid' ? 'var(--warn)' : 'var(--ink3)';
-        h += '<div class="block pad"><h3>매수 타점 점수 <small>' + (SV.market(s) === 'KR' ? '한국' : '미국') + ' 종목 10년 백테스트 기준</small></h3><div class="dial"><div class="g"><svg viewBox="0 0 112 66"><path d="M10 58 A46 46 0 0 1 102 58" fill="none" stroke="var(--sunk)" stroke-width="9" stroke-linecap="round"/><path d="M10 58 A46 46 0 0 1 ' + gx.toFixed(1) + ' ' + gy.toFixed(1) + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round"/></svg><b class="num">' + Math.round(sc.score) + '</b></div><div><div class="v ' + g.k + '">' + g.t + ' 구간</div><div class="s">' +
+        h += '<div class="block pad"><h3>단기 타점 점수 <small>20거래일 뒤 기준 · ' + (SV.market(s) === 'KR' ? '한국' : '미국') + ' 종목 10년 백테스트</small></h3><div class="dial"><div class="g"><svg viewBox="0 0 112 66"><path d="M10 58 A46 46 0 0 1 102 58" fill="none" stroke="var(--sunk)" stroke-width="9" stroke-linecap="round"/><path d="M10 58 A46 46 0 0 1 ' + gx.toFixed(1) + ' ' + gy.toFixed(1) + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round"/></svg><b class="num">' + Math.round(sc.score) + '</b></div><div><div class="v ' + g.k + '">' + g.t + ' 구간</div><div class="s">' +
           (g.k === 'buy' ? '과거 같은 구간에서 매수한 경우 20거래일 뒤 오른 비율이 평소보다 뚜렷이 높았습니다.' : g.k === 'avoid' ? '부정적 조합이 겹쳤으나, 미사용 검증 구간에서는 평소와 차이가 작았습니다. 약한 경고로만 보십시오.' : '검증된 조합이 충분히 겹치지 않았습니다. 이 점수만으로는 판단 근거가 없습니다.') + '</div></div></div>' +
           '<div class="kv"><div><div class="k">20일 뒤 상승 비율</div><div class="v">' + (b.win * 100).toFixed(0) + '%</div></div><div><div class="k">20일 평균 수익률</div><div class="v ' + cls(b.avg) + '">' + SV.pct(b.avg) + '</div></div><div><div class="k">도중 최대 하락(중앙값)</div><div class="v down">' + SV.pct(b.mae) + '</div></div></div>' +
           '<p class="note" style="margin-top:8px">위 수치는 모델 선정에 쓰지 않은 2023년 이후 구간에서 같은 점수대가 보인 결과입니다 (표본 ' + b.n.toLocaleString() + '건). 평소 아무 날에 샀을 때의 상승 비율은 ' + (sc.base.winH * 100).toFixed(0) + '%, 평균 ' + SV.pct(sc.base.avgH) + ' 입니다.</p>' +

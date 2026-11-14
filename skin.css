@@ -199,3 +199,21 @@ header.bar h1{flex:none;font-size:12px;letter-spacing:.1em;white-space:nowrap}
 .ibtn.bell{clip-path:none;padding:0 8px;overflow:visible}
 .rwhy{font-size:11px;line-height:1.55;color:var(--ink3);margin:8px 0 0}
 .rcells span.ext{border-style:dashed}
+/* 저점 매수 판정 */
+.dipv{display:flex;align-items:center;gap:14px;margin-top:4px}
+.dipv b{flex:none;font-size:19px;font-weight:800;letter-spacing:-.01em;padding:7px 12px;border:1px solid var(--line);color:var(--ink2);clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,0 100%)}
+.dipv span{font-size:11.5px;line-height:1.6;color:var(--ink2);min-width:0}
+.dipb.good .dipv b{color:#04070B;background:var(--good);border-color:var(--good);box-shadow:0 0 18px color-mix(in srgb,var(--good) 45%,transparent)}
+.dipb.bad .dipv b{color:#fff;background:var(--warn);border-color:var(--warn)}
+.dipb.mid .dipv b{color:var(--ink);background:var(--sunk)}
+.dipt{margin-top:10px;display:grid;gap:3px;font-family:var(--num);font-size:11px}
+.dipt>div{display:grid;grid-template-columns:minmax(0,1.25fr) repeat(3,minmax(0,1fr));gap:3px}
+.dipt>div>span{padding:7px 4px;text-align:center;background:var(--surface);border:1px solid var(--line);color:var(--ink2);font-weight:700}
+.dipt>div>span:first-child{font-family:var(--txt);font-weight:500;text-align:left;padding-left:8px;font-size:11px;color:var(--ink3);background:none;border-color:transparent}
+.dipt .h span{background:none;border-color:transparent;font-family:var(--txt);font-weight:500;font-size:10px;color:var(--ink3);padding:2px}
+.dipt span small{display:block;font-size:9.5px;font-weight:500;color:var(--ink3);margin-top:1px}
+.dipt span.g{color:var(--good)} .dipt span.r{color:var(--warn)}
+.dipt span.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent) inset;color:#fff}
+.row .sy .dg,.row .sy .db{font-family:var(--txt);font-size:10px;font-weight:700;padding:1px 5px;margin-left:6px}
+.row .sy .dg{color:var(--good);border:1px solid color-mix(in srgb,var(--good) 55%,transparent)}
+.row .sy .db{color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 55%,transparent)}
