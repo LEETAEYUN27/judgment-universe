@@ -123,6 +123,7 @@ def explain(D, known, cands, limit=10):
         moves.append({"id": m["id"], "s": s, "date": m["date"], "pct": m["pct"], "reason": why or "그 날짜 전후의 기사를 찾지 못함.", "by": "기사 근거 자동 분석 · 교차 검증 (Groq)", "src": [{"t": (h.get("ko") or h["t"])[:70], "u": h["u"]} for h in hl[:3]]}); done.append(m["id"])
         time.sleep(2)
     D["moves"] = moves[-500:]; return done
+ROWS = {}
 def ensure_hist(watch, ext, known):
     added = []; ROWS.clear()
     for w in watch:
