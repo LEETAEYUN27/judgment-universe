@@ -89,7 +89,7 @@ def underlying(n):
     u = re.search(r"\b(?:Long|Short|Bull|Bear|Target)\s+(?:\dX\s+)?(?:Long\s+|Short\s+)?([A-Z]{2,5})\b", n or "")
     return u.group(1) if u and u.group(1) not in ("ETF", "ETN", "DAILY") else None
 def tidy(t):
-    t = re.sub(r"\s*\((?:\[?\d+\]?[,\s]*)+\)", "", t or ""); t = re.sub(r"\[\d+\]", "", t)
+    t = re.sub(r"\s*\((?:관련\s*)?(?:기사|출처|근거)?\s*(?:번호)?\s*:?\s*(?:\[?\d+\]?[,·\s]*)+\)", "", t or ""); t = re.sub(r"\[\d+\]", "", t)
     t = re.sub(r"\s+", " ", t); t = re.sub(r"(?:^|(?<=[.!?]))\s*[.,]\s*", " ", t); return re.sub(r"\s{2,}", " ", t).strip(" .") + ("." if t.strip(" .") else "")
 def evidence(hl):
     return "\n".join(f"[{i + 1}] ({h.get('at', '')[:11]}, {h.get('src', '')}) {h['t']}" + (f" — {h['d']}" if h.get("d") else "") for i, h in enumerate(hl))
@@ -177,6 +177,16 @@ def dart_new(watch, known, F):
     F["dart_last"] = top; out.sort(key=lambda x: x["no"])
     return out
 
+def ko_names(ext):
+    """새로 추가된 미국 종목 · 상품에 짧은 한글 이름을 붙임 (한 번만)"""
+    todo = [x for x in ext if x.get("m") == "US" and not x.get("k") and not x.get("kx")][:10]
+    if not todo: return False
+    r = groq("다음 미국 상장 종목 · ETF 의 영문명을 한국 투자자가 부르는 짧은 한글 이름으로 바꿀 것. 회사는 통용 표기(예 : Palantir Technologies → 팔란티어), 단일 종목 레버리지 상품은 「기초 종목 + 배수 + 방향」(예 : GraniteShares 2x Long IONQ Daily ETF → 아이온큐 2배 롱). 확실하지 않으면 빈 문자열. 티커를 키로 하는 JSON 객체 하나만 출력.\n" + "\n".join(f"{x['s']} : {x['n']}" for x in todo), js=True, max_tokens=600)
+    for x in todo:
+        x["kx"] = 1; v = str((r or {}).get(x["s"]) or "").strip()
+        if v and re.search(r"[가-힣]", v) and len(v) <= 24: x["k"] = v
+    return True
+
 # ═════ 5분 작업 ═════
 def fast():
     watch, extra, trades = state(); idx, ext, known = index()
@@ -189,6 +199,7 @@ def fast():
         if wa: refresh_news(wa, known, FU); fund_dirty = True
         if cands and explain(D, known, cands, 8): save(os.path.join(LIVE, "daily.json"), D)
         if not first: notify("새 종목 준비 완료", ", ".join(name_of(known, s) for s in added) + " — 차트 · 타점 점수 · 가상 매매 사용 가능", "chart_with_upwards_trend", 2)
+    if ko_names(ext): save(os.path.join(LIVE, "idxx.json"), {"list": ext})
     syms = []; [syms.append(s) for s in [w["s"] for w in watch] + CORE + [x["s"] for x in extra] if s not in syms]
     q = dict(F.get("q") or {}); opened = {"US": False, "KR": False}; alerts = list(F.get("alerts") or []); ids = {a["id"] for a in alerts}; wmap = {w["s"]: w for w in watch}
     def push(a, title, tags, prio):
@@ -331,7 +342,7 @@ def daily(all_syms=False):
     have = {m["id"] for m in D.get("moves") or [] if "찾지 못함" not in m.get("reason", "") or m["date"] < kst_day() - 5}; cands = []
     D["moves"] = [m for m in D.get("moves") or [] if m["id"] in have]
     for w in watch: cands += find_moves(w["s"], full.get(w["s"]) or [], have)
-    done = set(explain(D, known, cands, 12)); moves = D["moves"]; new_moves = [m for m in moves if m["id"] in done and m["date"] >= asof]
+    done = set(explain(D, known, cands, 40)); moves = D["moves"]; new_moves = [m for m in moves if m["id"] in done and m["date"] >= asof]
     mk = {s: {"date": latest[s][-1][0], "close": latest[s][-1][4], "pct": round((latest[s][-1][4] / latest[s][-2][4] - 1) * 100, 2)} for s in ["^GSPC", "^IXIC", "^SOX", "^VIX", "^TNX", "CL=F", "KRW=X", "^KS11", "QQQ"] if len(latest.get(s) or []) == 2}
     cal = calendar(watch, known, FU)
     iss = issues(watch, known, D, FU, mk)
