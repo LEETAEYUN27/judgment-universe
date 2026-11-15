@@ -7,7 +7,7 @@ import { I, initInput, consume, press } from './input.js';
 import { Player, TUNE } from './player.js';
 import { spawnMonsters } from './boss.js';
 import { initFx, updateFx, burst, ring, mark, number, sfx, audioOn } from './fx.js';
-import { initLife, updateLife, nearest, interact, eat, tryBuild, canAfford, BUILD, ITEM, QUESTS, CHIEF, travel, gateOpen, save, load, placeBuild } from './life.js';
+import { initLife, updateLife, nearest, interact, eat, tryBuild, canAfford, BUILD, ITEM, QUESTS, CHIEF, REGNAME, regionsOpen, travel, gateOpen, save, load, placeBuild } from './life.js';
 import { Net } from './net.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -48,7 +48,9 @@ async function boot() {
 }
 function startUI() {
   if (G.region === 2) { $('#chap').textContent = '제2장 · 구름고래 고원'; $('#lore').textContent = '골짜기마다 구름 바다가 흐르고 노을이 오래 머무는 하늘 고원. 바람문을 건너온 꼬물족 앞에, 하늘을 헤엄치다 내려와 모두를 통째로 들이마시는 구름고래 「먹구름」이 나타난다.'; }
-  try { const s1 = JSON.parse(localStorage.getItem('mochi_save') || 'null'); if (G.region === 2 || (s1 && s1.stats && s1.stats.bossDead)) { $('#regRow').style.display = 'flex'; const b = $('#regBtn'), to = G.region === 2 ? 1 : 2; b.textContent = to === 2 ? '제2장 「구름고래 고원」에서 시작하기' : '제1장 「별꽃 분지」로 돌아가기'; b.onclick = () => { try { localStorage.setItem('mochi_region', String(to)); } catch (e) { } location.reload(); }; } } catch (e) { }
+  if (G.region === 3) { $('#chap').textContent = '제3장 · 잠든 화산섬'; $('#lore').textContent = '바다 한가운데 솟은 검은 화산섬. 오래 잠들어 있던 분화구에서 용암지네 「불등」이 깨어나 밤마다 불비를 내린다. 온천에서 몸을 추스르고, 용암 웅덩이를 피해 분화구 바닥까지 내려가야 한다.'; }
+  { const row = $('#regRow'); row.innerHTML = ''; const open = (() => { try { return regionsOpen(); } catch (e) { return [1]; } })().filter(r => r !== G.region);
+    if (open.length) { row.style.display = 'flex'; for (const to of open) { const b = document.createElement('button'); b.className = 'btn alt'; b.textContent = `제${to}장 「${REGNAME[to]}」`; b.onclick = () => { try { localStorage.setItem('mochi_region', String(to)); } catch (e) { } const q = new URLSearchParams(location.search); q.delete('map'); const qs = q.toString(); location.href = location.pathname + (qs ? '?' + qs : ''); }; row.appendChild(b); } } }
   const box = $('#chars'); CHARS.forEach(([k, nm], i) => { const b = document.createElement('button'); b.innerHTML = `<img src="assets/ui/${k}.png" alt="">${nm}`; b.className = i === 0 ? 'on' : ''; b.onclick = () => { kind = k; box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }; box.appendChild(b); });
   try { $('#name').value = localStorage.getItem('mochi_name') || ''; const k = localStorage.getItem('mochi_kind'); if (k) { kind = k; box.querySelectorAll('button').forEach((x, i) => x.classList.toggle('on', CHARS[i][0] === k)); } } catch (e) { }
   $('#solo').onclick = () => begin('solo'); $('#host').onclick = () => begin('host'); $('#join').onclick = () => begin('join');
@@ -71,7 +73,7 @@ async function begin(mode, keepCode, tries = 0) {
   $('#bossName').textContent = G.boss.name;
   $('#start').style.display = 'none'; $('#hud').classList.add('on'); $('#meName').textContent = name; G.paused = false; G.started = true;
   I.yaw = 0.6; I.pitch = 0.16; invUI(); questUI(); buildUI();
-  if (!had || G.quest === 0) setTimeout(() => toast((G.region === 2 ? '구름고래 고원에 도착! ' : '') + '「' + CHIEF + '」에게 가서 말을 걸어 보자 (E)'), 1200);
+  if (!had || G.quest === 0) setTimeout(() => toast((G.region > 1 ? REGNAME[G.region] + '에 도착! ' : '') + '「' + CHIEF + '」에게 가서 말을 걸어 보자 (E)'), 1200);
   setTimeout(() => toast(G.mobile ? '화면 빈 곳을 끌면 시선이 돌아감' : '화면을 클릭하면 마우스로 시선 회전 (Esc 로 풀기) · 클릭한 채 끌기나 방향키 ← → ↑ ↓ 도 가능'), 4500);
 }
 
@@ -97,11 +99,14 @@ function events() {
     if (e.st === 'eruptTell' && w) { const p = w.erupt || w.head; mark(p.x, p.z, 7.5, 0.7); sfx.tell(); }
     if (e.st === 'erupt' && w) { const p = w.erupt || w.head; burst(p.x, hAt(p.x, p.z) + 1, p.z, 90, 0xb89a70, 16, 0.9, 14, 20, 1.2); sfx.erupt(); if (G.me && near < 60) G.me.shake = 1; }
     if (e.st === 'dive') sfx.erupt();
+    if (e.st === 'rainTell' && e.boss) { sfx.roar(0.8); toast('불비가 내린다! 붉은 표시에서 벗어날 것'); }
+    if (e.st === 'rain' && w && w.hazard.rocks) { for (const q of w.hazard.rocks) burst(q[0], hAt(q[0], q[1]) + 1, q[1], 26, 0xff7a1a, 9, 0.7, 9, 14, 0.9); sfx.erupt(); if (G.me && near < 70) G.me.shake = Math.max(G.me.shake, 0.6); }
   });
   on('bossStep', p => { if (!G.me) return; const d = dist2(G.me.pos.x, G.me.pos.z, p.x, p.z); if (d < 45) { G.me.shake = Math.max(G.me.shake, 0.3 * (1 - d / 45)); sfx.stomp(); burst(p.x, p.y + 0.3, p.z, 5, 0x9a8a70, 3, 0.5, 2, 6, 0.6); } });
-  on('bossPhase', n => toast(G.region === 2 ? (n === 2 ? '먹구름이 하늘 높이 솟구쳐 내리꽂기 시작함!' : '먹구름이 미쳐 날뜀!') : (n === 2 ? '아귀룡이 땅속으로 파고들기 시작함!' : '아귀룡이 미쳐 날뜀!')));
+  on('bossRocks', e => { for (const q of e.rocks) mark(q[0], q[1], 4.6, e.t); sfx.tell(); });
+  on('bossPhase', n => toast(G.region === 3 ? (n === 2 ? '불등이 더 자주 불비를 뿜음!' : '불등이 미쳐 날뜀!') : G.region === 2 ? (n === 2 ? '먹구름이 하늘 높이 솟구쳐 내리꽂기 시작함!' : '먹구름이 미쳐 날뜀!') : (n === 2 ? '아귀룡이 땅속으로 파고들기 시작함!' : '아귀룡이 미쳐 날뜀!')));
   on('bossDead', e => { if (e.boss) { G.stats.bossDead = true; sfx.win(); toast(G.boss.name + '을(를) 쓰러뜨림! ' + CHIEF + '에게 돌아가자'); for (let i = 0; i < 6; i++) setTimeout(() => burst(e.pos.x + (Math.random() - 0.5) * 20, e.pos.y + 4, e.pos.z + (Math.random() - 0.5) * 20, 60, [0xffd84a, 0x7affd8, 0xff8ad0][i % 3], 14, 0.8, 12, 8, 1.6), i * 350); if (G.me) G.me.ch.st.cheer = 3; }
-    else { G.stats.mobKills++; burst(e.pos.x, e.pos.y, e.pos.z, 30, 0x9affd0, 8, 0.5, 6); sfx.quest(); toast((G.region === 2 ? '고원 괴물' : '새끼 아귀') + ' 토벌 (' + G.stats.mobKills + ')'); G.inv.dust += 1; invUI(); } questUI(); save(); });
+    else { G.stats.mobKills++; burst(e.pos.x, e.pos.y, e.pos.z, 30, 0x9affd0, 8, 0.5, 6); sfx.quest(); toast((G.region === 3 ? '불씨 아귀' : G.region === 2 ? '고원 괴물' : '새끼 아귀') + ' 토벌 (' + G.stats.mobKills + ')'); G.inv.dust += 1; invUI(); } questUI(); save(); });
   on('grabbed', () => { sfx.hurt(); toast('삼켜짐!'); });
   on('hurt', () => { sfx.hurt(); const h = $('#hurt'); h.style.opacity = 1; setTimeout(() => h.style.opacity = 0, 180); });
   on('died', () => { sfx.die(); $('#dead').style.display = 'flex'; }); on('respawn', () => { $('#dead').style.display = 'none'; });
@@ -110,10 +115,10 @@ function events() {
   on('hitstop', t => { hitstop = Math.max(hitstop, t); }); on('toast', toast); on('inv', invUI); on('quest', questUI); on('roster', () => { const n = G.net ? G.net.count : 1; $('#roomN').textContent = n; if (isHost() && G.boss.alive) { const b = G.boss, base = 2600, nm = Math.round(base * (1 + 0.6 * (n - 1))); b.hp = Math.round(b.hp / b.maxHp * nm); b.maxHp = nm; } });
   on('dialog', openDialog);
   on('gate', () => {
-    if (!gateOpen()) { toast('바람문이 잠들어 있음. 아귀룡을 쓰러뜨리면 열림'); return; }
+    const open = regionsOpen().filter(r => r !== G.region);
+    if (!open.length) { toast('바람문이 잠들어 있음. ' + G.boss.name + '을(를) 쓰러뜨리면 열림'); return; }
     if (G.net && !G.net.host) { toast('지역 이동은 방장만 할 수 있음'); return; }
-    const to = G.region === 2 ? 1 : 2, nm = to === 2 ? '구름고래 고원' : '별꽃 분지';
-    emit('dialog', { who: '바람문', lines: [`바람문 너머로 「${nm}」의 바람이 불어온다. 소지품과 도끼는 가져가고, 이곳의 집과 퀘스트는 그대로 남는다.` + (G.net ? ' 방의 친구들도 함께 건너간다.' : '')], choice: ['건너간다', '다음에'], pick: i => { if (i !== 0) return; if (G.net) { G.net.cast({ t: 'travel', r: to }); setTimeout(() => travel(to, { mode: 'host', code: G.net.code }), 400); } else travel(to, { mode: 'solo' }); } });
+    emit('dialog', { who: '바람문', lines: ['바람문 너머로 다른 땅의 바람이 불어온다. 소지품과 도끼는 가져가고, 이곳의 집과 퀘스트는 그대로 남는다.' + (G.net ? ' 방의 친구들도 함께 건너간다.' : '')], choice: [...open.map(r => `「${REGNAME[r]}」(으)로`), '다음에'], pick: i => { const to = open[i]; if (!to) return; if (G.net) { G.net.cast({ t: 'travel', r: to }); setTimeout(() => travel(to, { mode: 'host', code: G.net.code }), 400); } else travel(to, { mode: 'solo' }); } });
   });
   on('travel', m => { toast('방장을 따라 다른 지역으로 건너감…'); setTimeout(() => travel(m.r, { mode: 'join', code: G.net.code }), 600); });
   $('#bClose').onclick = () => toggleBuild(false);
@@ -130,7 +135,8 @@ function questTarget() {
   const near = (list, n) => { let b = null, bd = 1e9; for (const o of list) { const d = dist2(me.pos.x, me.pos.z, o.x, o.z); if (d < bd) { bd = d; b = o; } } return b && { x: b.x, z: b.z, n }; };
   const t = q.tgt ? q.tgt() : null; if (!t) return null; const NM = { fruit: '별열매', wood: '나무', stone: '돌', dust: '빛나는 꽃', chest: '하늘섬 바람꽃' };
   if (t[0] === 'mob') return near(G.mobs.filter(m => m.alive).map(m => m.head), '괴물');
-  if (t[0] === 'arena') return { x: W.arena.x, z: W.arena.z, n: G.region === 2 ? '바람골' : '분화구' };
+  if (t[0] === 'spa') return { x: W.lake.x, z: W.lake.z, n: '온천' };
+  if (t[0] === 'arena') return { x: W.arena.x, z: W.arena.z, n: G.region === 2 ? '바람골' : G.region === 3 ? '화산 분화구' : '분화구' };
   if (t[0] === 'chest') { const open = W.nodes.filter(n => n.type === 'chest' && n.ready).map(n => { let b = null, bd = 1e9; for (const p of W.pads) { const d = dist2(p.x, p.z, n.x, n.z); if (d < bd) { bd = d; b = p; } } return b; }).filter(Boolean); return me.pos.y > hAt(me.pos.x, me.pos.z) + 15 ? near(W.nodes.filter(n => n.type === 'chest' && n.ready), '상자') : near(open, NM.chest); }
   return near(W.nodes.filter(n => n.type === t[0] && n.ready), NM[t[0]]);
 }
@@ -141,7 +147,7 @@ function questDir() {
   const f = G.camera.getWorldDirection(new THREE.Vector3()), a = Math.atan2(f.z * dx - f.x * dz, f.x * dx + f.z * dz);
   el.style.display = 'flex'; $('#qArrow').style.transform = `rotate(${(-a * 57.3).toFixed(0)}deg)`; $('#qDist').textContent = `${qT.n} ${Math.round(d)}걸음`;
 }
-function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 2 ? '구름고래 고원을 지켜 냄. 다음 지역 준비 중' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 고원에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
+function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '잠든 화산섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 고원을 지켜 냄. 바람문으로 잠든 화산섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 고원에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
 function buildUI() { const g = $('#bGrid'); if (!g) return; g.innerHTML = BUILD.map((b, i) => `<button class="it ${canAfford(b) ? '' : 'no'}" data-k="${b.k}">${i + 1}. ${b.name}<small>${b.desc}</small><b>${Object.entries(b.cost).map(([k, v]) => `${ITEM[k][1]}${v}`).join(' ')}</b></button>`).join(''); g.querySelectorAll('.it').forEach(el => el.onclick = () => { tryBuild(el.dataset.k); toggleBuild(false); }); }
 function toggleBuild(v) { const el = $('#build'), on = v === undefined ? el.style.display !== 'block' : v; if (on && dlg) return; el.style.display = on ? 'block' : 'none'; G.ui.blocked = on || !!dlg; if (on) { buildUI(); document.exitPointerLock && document.exitPointerLock(); } }
 let dlg = null;

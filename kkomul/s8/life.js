@@ -13,8 +13,10 @@ export const BUILD = [
   { k: 'hut', name: '오두막', model: 'hut', s: 1.15, cost: { wood: 14, stone: 8 }, desc: '쓰러지면 여기서 다시 일어남', r: 2.6 },
 ];
 const NPCS = [];
-const R2 = G.region === 2;
-export const CHIEF = R2 ? '솜이 할멈' : '촌장 모루';
+const R2 = G.region === 2, R3 = G.region === 3;
+export const CHIEF = R2 ? '솜이 할멈' : R3 ? '등대지기 도롱' : '촌장 모루';
+export const REGNAME = ['', '별꽃 분지', '구름고래 고원', '잠든 화산섬'];
+const SAVEKEY = r => 'mochi_save' + (r > 1 ? r : '');
 const QUESTS1 = [
   { title: '첫 끼니', goal: '별열매 5개를 따서 촌장에게 가져가기', talk: ['어이쿠, 낯선 꼬물이로구먼. 나는 이 분지의 촌장 「모루」라네.', '여긴 별꽃 분지. 밤마다 풀과 꽃이 빛나는 아름다운 곳이지만… 북서쪽 분화구에 「아귀룡」이 둥지를 튼 뒤로 다들 달아나 버렸지.', '우선 배부터 채우세. 빛나는 덤불에서 별열매를 5개 따 오게. (덤불 앞에서 E)'], tgt: () => ['fruit'], check: () => G.inv.fruit >= 5, take: () => { G.inv.fruit -= 5; }, reward: () => { G.inv.seed += 3; G.inv.dust += 2; return '씨앗 3 · 빛가루 2'; }, done: '옳지, 잘 익었구먼! 답례로 씨앗과 빛가루를 주지.' },
   { title: '불씨', goal: '나무 4 · 돌 3을 모아 모닥불 화로 짓기 (B)', talk: ['밤이 길어. 그루터기와 바위를 도끼로 두드려 나무와 돌을 모으고, 화로를 지어 보게.', '화로 곁에 있으면 다친 몸이 낫는다네. (도끼질 : 마우스 왼쪽 / 짓기 : B)'], tgt: () => G.inv.wood < 4 ? ['wood'] : G.inv.stone < 3 ? ['stone'] : null, check: () => G.builds.some(b => b.k === 'fire'), reward: () => { G.weaponLv++; return '도끼 강화 +1'; }, done: '따뜻하구먼. 자네 도끼날을 벼려 주지. 한결 매서워질 걸세.' },
@@ -29,15 +31,23 @@ const QUESTS2 = [
   { title: '등불 길', goal: '등불 2개 세우기 (B · 나무 1 · 빛가루 2)', talk: ['새끼 구름고래들은 어둑한 곳을 좋아한단다. 마을 어귀에 등불을 세워 길을 밝혀 다오.', '등불 2개면 된단다. 빛가루는 빛나는 꽃에서 모을 수 있지.'], tgt: () => G.inv.dust < 4 ? ['dust'] : null, check: () => G.builds.filter(b => b.k === 'lamp').length >= 2, reward: () => { G.inv.wood += 10; G.inv.stone += 6; return '나무 10 · 돌 6'; }, done: '환하구나! 이 나무와 돌로 집도 지어 보렴.' },
   { title: '새끼 구름고래', goal: '새끼 구름고래나 고원 아귀 3마리 쓰러뜨리기', talk: ['새끼 구름고래는 머리 위를 맴돌다 내리꽂힌단다. 눈이 번쩍하면 옆으로 굴러 피하렴.', '물고 나서 땅에 엎드려 있는 틈에 두드리면 된단다. 3마리만 쓰러뜨려 보렴.'], tgt: () => ['mob'], check: () => G.stats.mobKills >= 3, reward: () => { G.weaponLv++; G.me.maxHp += 30; G.me.hp = G.me.maxHp; return '도끼 강화 +1 · 최대 체력 +30'; }, done: '장하구나! 이제 먹구름 앞에 설 만하겠어.' },
   { title: '고원의 보금자리', goal: '나무 14 · 돌 8로 오두막 짓기', talk: ['큰 싸움 전에는 돌아올 집이 있어야 한단다. 바람골이 보이는 곳에 오두막을 지어 두렴.', '쓰러지더라도 오두막에서 다시 일어날 수 있단다.'], tgt: () => G.inv.wood < 14 ? ['wood'] : G.inv.stone < 8 ? ['stone'] : null, check: () => G.builds.some(b => b.k === 'hut'), reward: () => { G.weaponLv++; G.inv.fruit += 6; return '도끼 강화 +1 · 별열매 6'; }, done: '아늑하구나. 이제 때가 되었단다.' },
-  { title: '구름고래 「먹구름」', goal: '동쪽 바람골의 구름고래 쓰러뜨리기', talk: ['동쪽 높은 대지 「바람골」에 먹구름이 잠들어 있단다.', '놈이 입을 크게 벌리고 숨을 들이쉬면 빨려 들어간단다. 그때는 옆으로 굴러서(Shift) 입 앞에서 벗어나렴.', '하늘 높이 솟구치면 네 머리 위로 떨어진다는 신호야. 바닥의 붉은 표시에서 벗어나고, 퍼지는 고리는 뛰어넘으렴.', '물거나 떨어진 뒤 땅에 엎드린 틈이 기회란다. 돌진할 때 돌기둥 뒤에 숨으면 들이받고 뻗는단다. 살아서 돌아오렴.'], tgt: () => ['arena'], check: () => G.stats.bossDead, reward: () => { G.inv.dust += 30; return '빛가루 30 · 「고원의 수호자」'; }, done: '해냈구나…! 고원 하늘이 다시 맑아지겠어. 구름 바다 건너 「잠든 화산섬」에서도 연기가 오른다는구나. (다음 지역 준비 중)' },
+  { title: '구름고래 「먹구름」', goal: '동쪽 바람골의 구름고래 쓰러뜨리기', talk: ['동쪽 높은 대지 「바람골」에 먹구름이 잠들어 있단다.', '놈이 입을 크게 벌리고 숨을 들이쉬면 빨려 들어간단다. 그때는 옆으로 굴러서(Shift) 입 앞에서 벗어나렴.', '하늘 높이 솟구치면 네 머리 위로 떨어진다는 신호야. 바닥의 붉은 표시에서 벗어나고, 퍼지는 고리는 뛰어넘으렴.', '물거나 떨어진 뒤 땅에 엎드린 틈이 기회란다. 돌진할 때 돌기둥 뒤에 숨으면 들이받고 뻗는단다. 살아서 돌아오렴.'], tgt: () => ['arena'], check: () => G.stats.bossDead, reward: () => { G.inv.dust += 30; return '빛가루 30 · 「고원의 수호자」'; }, done: '해냈구나…! 고원 하늘이 다시 맑아지겠어. 구름 바다 건너 「잠든 화산섬」에서도 연기가 오른다는구나. 바람문이 그곳까지 이어졌으니 준비되면 건너가 보렴.' },
 ];
-export const QUESTS = R2 ? QUESTS2 : QUESTS1;
+const QUESTS3 = [
+  { title: '섬의 첫 끼니', goal: '별열매 6개를 따서 등대지기 도롱에게 가져가기', talk: ['어, 어서 와! 바람문에서 누가 나오다니. 난 이 섬의 등대지기 「도롱」이야.', '여긴 잠든 화산섬. 바다 한가운데 솟은 섬이고, 북서쪽 큰 화산은 오래 잠들어 있었지. 그런데 분화구 속에서 용암지네 「불등」이 깨어난 뒤로 밤마다 불비가 내려.', '배고프지? 일단 별열매 6개만 따다 줘. 이야기는 먹으면서 하자.'], tgt: () => ['fruit'], check: () => G.inv.fruit >= 6, take: () => { G.inv.fruit -= 6; }, reward: () => { G.inv.seed += 3; G.inv.dust += 3; return '씨앗 3 · 빛가루 3'; }, done: '고마워! 화산재 덕분에 이 섬 열매는 유난히 크다니까.' },
+  { title: '온천', goal: '동남쪽 온천에 몸 담그기', talk: ['이 섬의 자랑은 온천이야. 동남쪽 김이 오르는 물에 들어가 있으면 다친 몸이 금세 나아.', '불등과 싸우다 다치면 거기서 쉬면 돼. 한번 다녀와 봐.'], tgt: () => ['spa'], check: () => !!G.stats.spa, reward: () => { G.me.maxHp += 25; G.me.hp = G.me.maxHp; return '최대 체력 +25'; }, done: '어때, 뜨끈하지? 몸이 한결 단단해졌을 거야.' },
+  { title: '불씨 아귀', goal: '불씨 아귀 3마리 쓰러뜨리기', talk: ['불등의 새끼인 불씨 아귀들이 숲까지 내려왔어.', '달려들기 전에 눈이 번쩍하니까 옆으로 굴러 피하고 등을 두드려. 3마리만 부탁해.'], tgt: () => ['mob'], check: () => G.stats.mobKills >= 3, reward: () => { G.weaponLv++; return '도끼 강화 +1'; }, done: '대단한데! 도끼날을 화산암에 갈아 줄게.' },
+  { title: '검은 돌', goal: '돌 10개를 모아 등대지기에게 가져가기', talk: ['등대를 고치려면 검은 화산암이 필요해. 바위를 도끼로 두드리면 돌이 나와.', '10개만 모아 줘.'], tgt: () => ['stone'], check: () => G.inv.stone >= 10, take: () => { G.inv.stone -= 10; }, reward: () => { G.weaponLv++; G.inv.wood += 14; return '도끼 강화 +1 · 나무 14'; }, done: '이거면 충분해! 남는 나무는 네 집 짓는 데 써.' },
+  { title: '섬의 보금자리', goal: '나무 14 · 돌 8로 오두막 짓기', talk: ['분화구에 들어가기 전에 돌아올 집부터 지어 둬.', '쓰러져도 오두막에서 다시 일어날 수 있어.'], tgt: () => G.inv.wood < 14 ? ['wood'] : G.inv.stone < 8 ? ['stone'] : null, check: () => G.builds.some(b => b.k === 'hut'), reward: () => { G.weaponLv++; G.inv.fruit += 6; return '도끼 강화 +1 · 별열매 6'; }, done: '튼튼하게 지었네. 이제 준비 끝이야.' },
+  { title: '용암지네 「불등」', goal: '북서쪽 화산 분화구의 불등 쓰러뜨리기', talk: ['북서쪽 화산을 올라 분화구 안으로 내려가면 불등이 있어.', '분화구 바닥의 용암 웅덩이는 밟으면 데니까 조심해. 불등이 몸을 세우고 하늘로 불을 뿜으면 불비가 내려. 바닥의 붉은 표시에서 얼른 벗어나.', '돌진할 때 현무암 기둥 뒤에 숨으면 들이받고 뻗어. 그때 머리를 노려. 꼭 살아서 돌아와!'], tgt: () => ['arena'], check: () => G.stats.bossDead, reward: () => { G.inv.dust += 40; return '빛가루 40 · 「화산섬의 수호자」'; }, done: '해냈구나…! 이제 밤에도 불비가 안 내리겠지. 바다 건너 또 다른 땅에서 소식이 오면 알려 줄게. (다음 지역 준비 중)' },
+];
+export const QUESTS = R2 ? QUESTS2 : R3 ? QUESTS3 : QUESTS1;
 
 export function initLife() {
   G.stats = G.stats || { harvest: 0, mobKills: 0, bossDead: false };
   // 촌장 · 떠돌이 상인
-  const chief = new Char(R2 ? 'beoseot' : 'gureum', { name: CHIEF, weapon: false, scale: 1.55 }); const cx = W.spawn.x - 7, cz = W.spawn.z + 3; chief.root.position.set(cx, hAt(cx, cz), cz); chief.root.rotation.y = 1.2;
-  const lamp = clone('Lantern_01'); lamp.scale.setScalar(3); lamp.position.set(cx + 1.4, hAt(cx + 1.4, cz + 0.6), cz + 0.6); G.scene.add(lamp); const pl = new THREE.PointLight(0xffc27a, 14, 22, 1.7); pl.position.set(cx + 1.4, hAt(cx, cz) + 1.2, cz + 0.6); G.scene.add(pl);
+  const chief = new Char(R2 ? 'beoseot' : R3 ? 'dorong' : 'gureum', { name: CHIEF, weapon: false, scale: 1.55 }); const cx = W.spawn.x - 7, cz = W.spawn.z + 3; chief.root.position.set(cx, hAt(cx, cz), cz); chief.root.rotation.y = 1.2;
+  const lamp = clone('Lantern_01'); lamp.scale.setScalar(3); lamp.position.set(cx + 1.4, hAt(cx + 1.4, cz + 0.6), cz + 0.6); G.scene.add(lamp); const pl = new THREE.PointLight(0xffc27a, 7, 22, 1.7); pl.position.set(cx + 1.4, hAt(cx, cz) + 1.2, cz + 0.6); G.scene.add(pl);
   NPCS.push({ id: 'chief', ch: chief, x: cx, z: cz, r: 3.4 });
   const mx = W.lake.x - W.lake.r - 26, mz = W.lake.z - 30, mer = new Char('ppiyak', { name: '떠돌이 삐삐', weapon: false, scale: 1.35 }); mer.root.position.set(mx, hAt(mx, mz), mz); NPCS.push({ id: 'merchant', ch: mer, x: mx, z: mz, r: 3.2 });
   addCollider({ x: cx, z: cz, r: 0.7 }); addCollider({ x: mx, z: mz, r: 0.6 });
@@ -51,11 +61,13 @@ export function initLife() {
   on('strike', onStrike);
 }
 let GATE = null;
-export const gateOpen = () => R2 || !!(G.stats && G.stats.bossDead);
+// 갈 수 있는 지역 : 앞 지역의 보스를 쓰러뜨려야 다음 지역이 열림
+export function regionsOpen() { const dead = r => { if (r === G.region && G.stats && G.stats.bossDead) return true; try { const t = JSON.parse(localStorage.getItem(SAVEKEY(r)) || 'null'); return !!(t && t.stats && t.stats.bossDead); } catch (e) { return false; } }; const o = [1]; if (dead(1) || G.region >= 2) o.push(2); if (dead(2) || G.region >= 3) o.push(3); return o; }
+export const gateOpen = () => regionsOpen().some(r => r !== G.region);
 // 다른 지역으로 : 소지품 · 도끼 · 체력은 가져가고, 퀘스트 · 건물은 지역마다 따로 저장
 export function travel(to, auto) {
   save();
-  try { const key = to === 2 ? 'mochi_save2' : 'mochi_save', t = JSON.parse(localStorage.getItem(key) || '{}'); t.inv = G.inv; t.weaponLv = G.weaponLv; t.maxHp = G.me ? G.me.maxHp : t.maxHp; localStorage.setItem(key, JSON.stringify(t));
+  try { const key = SAVEKEY(to), t = JSON.parse(localStorage.getItem(key) || '{}'); t.inv = G.inv; t.weaponLv = G.weaponLv; t.maxHp = G.me ? G.me.maxHp : t.maxHp; localStorage.setItem(key, JSON.stringify(t));
     localStorage.setItem('mochi_region', String(to)); if (auto) sessionStorage.setItem('mochi_auto', JSON.stringify(auto)); } catch (e) { }
   G.leaving = true; const q = new URLSearchParams(location.search); q.delete('map'); const qs = q.toString(); location.href = location.pathname + (qs ? '?' + qs : '');
 }
@@ -64,7 +76,7 @@ export function travel(to, auto) {
 export function nearest(p) {
   let best = null, bd = 1e9;
   for (const n of NPCS) { const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && d < bd) { bd = d; best = { kind: 'npc', n, label: n.id === 'chief' ? CHIEF + '과 이야기' : '상인과 거래' }; } }
-  for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : n.type === 'gate' ? (R2 ? '바람문 : 별꽃 분지로 돌아가기' : gateOpen() ? '바람문 : 구름고래 고원으로 떠나기' : '닫힌 바람문') : '상자 열기' }; } }
+  for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : n.type === 'gate' ? (gateOpen() ? '바람문 : 다른 지역으로 떠나기' : '닫힌 바람문') : '상자 열기' }; } }
   for (const b of G.builds) { if (b.k !== 'farm') continue; const d = dist2(p.x, p.z, b.x, b.z); if (d < 2.6 && d < bd) { const st = b.state || 0; if (st === 0 && G.inv.seed > 0) { bd = d; best = { kind: 'farm', b, label: '씨앗 심기' }; } else if (st === 2) { bd = d; best = { kind: 'farm', b, label: '수확하기' }; } } }
   return best;
 }
@@ -126,10 +138,10 @@ export function farmRemote(x, z) { const b = G.builds.find(o => o.k === 'farm' &
 
 /* ───── 대화 · 퀘스트 ───── */
 function talkChief() {
-  const q = QUESTS[G.quest]; if (!q) { emit('dialog', { who: CHIEF, lines: [R2 ? '네 덕에 고원 하늘이 맑단다. 다음 지역이 열리면 또 부탁하마.' : '자네 덕에 분지가 평온하다네. 내 옆의 「바람문」으로 구름고래 고원에 건너갈 수 있다네.'] }); return; }
+  const q = QUESTS[G.quest]; if (!q) { emit('dialog', { who: CHIEF, lines: [R3 ? '네 덕분에 섬이 조용해졌어. 다음 지역이 열리면 또 부탁할게!' : R2 ? '네 덕에 고원 하늘이 맑단다. 바람문으로 「잠든 화산섬」에 건너갈 수 있단다.' : '자네 덕에 분지가 평온하다네. 내 옆의 「바람문」으로 구름고래 고원에 건너갈 수 있다네.'] }); return; }
   if (G.questProg === 0) { emit('dialog', { who: CHIEF, lines: q.talk, end: () => { G.questProg = 1; emit('quest'); sfx.quest(); } }); return; }
   if (q.check()) { if (q.take) q.take(); const rw = q.reward(); emit('dialog', { who: CHIEF, lines: [q.done, `〔보상〕 ${rw}`], end: () => { G.quest++; G.questProg = 0; emit('quest'); emit('inv'); sfx.quest(); G.me.ch.st.cheer = 1.2; save(); if (QUESTS[G.quest]) talkChief(); } }); }
-  else emit('dialog', { who: CHIEF, lines: [(R2 ? '아직이구나. ' : '아직이구먼. ') + q.goal + '.'] });
+  else emit('dialog', { who: CHIEF, lines: [(R3 ? '아직이네. ' : R2 ? '아직이구나. ' : '아직이구먼. ') + q.goal + '.'] });
 }
 function talkMerchant() {
   G.stats.hpBuy = G.stats.hpBuy || 0;
@@ -140,6 +152,9 @@ function talkMerchant() {
 
 /* ───── 시간에 따른 갱신 ───── */
 export function updateLife(dt) {
+  if (R3 && G.me && !G.me.dead) { const me = G.me, p = me.pos;
+    if (dist2(p.x, p.z, W.lake.x, W.lake.z) < W.lake.r * 1.25 && p.y < W.water + 0.4) { if (me.hp < me.maxHp) me.heal(9 * dt); if (!G.stats.spa) { G.stats.spa = true; emit('toast', '온천에 몸을 담금. 다친 몸이 나음'); emit('quest'); } }
+    for (const L of W.lavas) if (dist2(p.x, p.z, L.x, L.z) < L.r && p.y < L.y + 0.7 && me.inv <= 0) { if (me.damage(16, L, 6)) { me.vel.y = 13; burst(p.x, p.y + 0.5, p.z, 24, 0xff7a1a, 5, 0.5, 6); } break; } }
   if (GATE) { const k = gateOpen() ? 1.6 + Math.sin(G.time * 2.2) * 0.5 : 0.15; for (const m of GATE.mats) m.emissiveIntensity = k; GATE.light.intensity = gateOpen() ? 26 : 0; }
   for (const n of NPCS) { n.ch.update(dt); if (G.me) { const d = dist2(G.me.pos.x, G.me.pos.z, n.x, n.z); if (d < 9) n.ch.root.rotation.y += (Math.atan2(G.me.pos.x - n.x, G.me.pos.z - n.z) - n.ch.root.rotation.y) * Math.min(1, dt * 4); } }
   if ((G.frame & 31) === 0) {
@@ -151,8 +166,8 @@ export function updateLife(dt) {
 
 /* ───── 저장 ───── */
 export function save() {
-  try { if (G.leaving) return; localStorage.setItem(R2 ? 'mochi_save2' : 'mochi_save', JSON.stringify({ inv: G.inv, weaponLv: G.weaponLv, quest: G.quest, questProg: G.questProg, stats: G.stats, maxHp: G.me ? G.me.maxHp : 100, home: G.home, builds: G.net && !G.net.host ? [] : G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })) })); } catch (e) { }
+  try { if (G.leaving || !G.started) return; localStorage.setItem(SAVEKEY(G.region), JSON.stringify({ inv: G.inv, weaponLv: G.weaponLv, quest: G.quest, questProg: G.questProg, stats: G.stats, maxHp: G.me ? G.me.maxHp : 100, home: G.home, builds: G.net && !G.net.host ? [] : G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })) })); } catch (e) { }
 }
 export function load() {
-  try { const s = JSON.parse(localStorage.getItem(R2 ? 'mochi_save2' : 'mochi_save') || 'null'); if (!s) return false; Object.assign(G.inv, s.inv); G.weaponLv = s.weaponLv || 0; G.quest = s.quest || 0; G.questProg = s.questProg || 0; G.stats = Object.assign({ harvest: 0, mobKills: 0, bossDead: false }, s.stats); G.home = s.home || null; G._maxHp = s.maxHp; G._builds = s.builds || []; return true; } catch (e) { return false; }
+  try { const s = JSON.parse(localStorage.getItem(SAVEKEY(G.region)) || 'null'); if (!s) return false; Object.assign(G.inv, s.inv); G.weaponLv = s.weaponLv || 0; G.quest = s.quest || 0; G.questProg = s.questProg || 0; G.stats = Object.assign({ harvest: 0, mobKills: 0, bossDead: false }, s.stats); G.home = s.home || null; G._maxHp = s.maxHp; G._builds = s.builds || []; return true; } catch (e) { return false; }
 }
