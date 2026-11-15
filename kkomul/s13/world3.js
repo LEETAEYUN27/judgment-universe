@@ -51,6 +51,8 @@ function terrain3() {
         gLava = smoothstep(0.5, 0.6, m) * smoothstep(0.75, 0.9, vWn.y + m * 0.3);
         gGlow = vec3(1.0, 0.2, 0.02) * smoothstep(0.25, 0.52, m) * (1.0 - gLava) * 0.55                       // 달아오른 가장자리
               + vec3(1.0, 0.35, 0.05) * vColor.b * smoothstep(0.6, 0.9, fb(q * 0.6)) * (0.5 + 0.5 * sin(uTime * 1.3 + q.x * 0.4 + q.y * 0.3)) * 0.5;   // 불씨 이끼
+        float vein = pow(clamp(1.0 - abs(fb(q * 0.075 + 13.0) * 2.0 - 1.0) * 2.2, 0.0, 1.0), 5.0) * smoothstep(0.25, 0.75, vColor.g) * (1.0 - gLava) * smoothstep(0.45, 0.2, 1.0 - vWn.y);   // 화산 둘레의 달아오른 실금 (피해 없음)
+        gGlow += vec3(1.0, 0.24, 0.03) * vein * (0.7 + 0.3 * sin(uTime * 0.9 + q.x * 0.1)) * 0.9; c *= 1.0 - vein * 0.5;
         diffuseColor.rgb = mix(c, vec3(0.02, 0.01, 0.01), gLava);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += gGlow + lavaCol(vWp.xz, uTime, 0.11) * gLava;`);
@@ -110,7 +112,7 @@ function spring() {
     vertexShader: 'varying vec3 vP; void main(){ vP = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * viewMatrix * vec4(vP, 1.0); }',
     fragmentShader: `varying vec3 vP; uniform float uTime, uR; uniform vec2 uC;\n${NOISE}
       void main(){ float d = distance(vP.xz, uC); float w = fb(vP.xz * 0.16 + uTime * 0.08); vec3 V = normalize(cameraPosition - vP); float fr = pow(1.0 - max(V.y, 0.0), 3.0);
-        vec3 c = mix(vec3(0.05, 0.55, 0.55), vec3(0.45, 1.0, 0.9), smoothstep(0.3, 0.8, w)) * 1.15; c += vec3(0.6, 1.0, 0.95) * smoothstep(0.75, 0.9, fb(vP.xz * 0.5 - uTime * 0.15)) * 0.5;
+        vec3 c = mix(vec3(0.02, 0.30, 0.34), vec3(0.16, 0.62, 0.60), smoothstep(0.3, 0.8, w)); c += vec3(0.5, 0.9, 0.85) * smoothstep(0.78, 0.92, fb(vP.xz * 0.5 - uTime * 0.15)) * 0.22;
         c = mix(c, vec3(0.5, 0.12, 0.06), fr * 0.5); gl_FragColor = vec4(c, mix(0.8, 0.95, fr) * smoothstep(uR * 1.0, uR * 0.88, d)); }` });
   const m = new THREE.Mesh(new THREE.CircleGeometry(L.r * 1.02, 48), mat); m.rotation.x = -Math.PI / 2; m.position.set(L.x, y, L.z); G.scene.add(m); W.pool = { x: L.x, z: L.z, r: L.r, y };
   // 김

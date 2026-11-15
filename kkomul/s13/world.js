@@ -338,7 +338,7 @@ function islands() {
       const h = new THREE.Group(); h.add(m); h.scale.set(s, -s * (1.4 + k * 0.5), s); h.rotation.y = k * 1.3 + r(); h.position.y = -1.5 - k * rad * 0.16; g.add(h); m.castShadow = true;
     }
     // 윗면 : 납작하게 누른 큰 바위 + 풀 재질
-    for (const p of top) { const m = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({ map: G.assets.t_leafy_grass, normalMap: G.assets.n_leafy_grass, color: 0xb8f0c8, roughness: 0.95 })); m.material.map.repeat.set(1, 1); m.applyMatrix4(p.m); const h = new THREE.Group(); h.add(m); const s = rad * 2.1 / Math.max(tb.size.x, tb.size.z); h.scale.set(s, s * 0.16, s); h.position.y = -tb.size.y * s * 0.16 * 0.42; g.add(h); m.receiveShadow = true; }
+    for (const p of top) { const m = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({ map: G.assets.t_leafy_grass, normalMap: G.assets.n_leafy_grass, color: 0xb8f0c8, roughness: 0.95 })); m.material.map = m.material.map.clone(); m.material.map.repeat.set(9, 9); m.material.map.needsUpdate = true; m.material.normalMap = m.material.normalMap.clone(); m.material.normalMap.repeat.set(9, 9); m.material.normalMap.needsUpdate = true; m.applyMatrix4(p.m); const h = new THREE.Group(); h.add(m); const s = rad * 2.1 / Math.max(tb.size.x, tb.size.z); h.scale.set(s, s * 0.16, s); h.position.y = -tb.size.y * s * 0.16 * 0.42; g.add(h); m.receiveShadow = true; }
     const ts = 2.2 + r() * 1.5, tree = clone('island_tree_02'); tree.scale.setScalar(ts); W.colliders.push({ x: x + rad * 0.25, z: z - rad * 0.2, r: 0.4 * ts, y0: y, h: 3 * ts }, { x: x - rad * 0.3, z: z + rad * 0.15, r: 0.9, y0: y, h: 1.2 }); tree.position.set(rad * 0.25, 0, -rad * 0.2); g.add(tree);
     const chest = clone('treasure_chest'); chest.scale.setScalar(1.6); chest.position.set(-rad * 0.3, 0, rad * 0.15); chest.rotation.y = r() * 6; g.add(chest);
     W.nodes.push({ id: 'chest' + W.islands.length, type: 'chest', x: x - rad * 0.3, z: z + rad * 0.15, y, obj: chest, ready: true, r: 3.2 });
@@ -349,8 +349,8 @@ function islands() {
 }
 export function addPad(x, z, power, toward) {
   const y = hAt(x, z), f = clone('flower_gazania'); f.scale.setScalar(9); f.position.set(x, y, z);
-  f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0x35ffd0); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.6; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } });
-  if (W.pads.length < 4) { const l = new THREE.PointLight(0x35ffd0, 22, 26, 1.6); l.position.set(0, 0.35, 0); f.add(l); } G.scene.add(f);
+  f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(R3 ? 0xff8a2a : 0x35ffd0); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.6; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } });
+  if (W.pads.length < 4) { const l = new THREE.PointLight(R3 ? 0xff8a2a : 0x35ffd0, 22, 26, 1.6); l.position.set(0, 0.35, 0); f.add(l); } G.scene.add(f);
   const d = Math.hypot(toward[0], toward[1]) || 1; W.pads.push({ x, z, y, r: 2.6, power, dir: [toward[0] / d, toward[1] / d], dist: d, obj: f });
 }
 
@@ -361,19 +361,22 @@ function resources() {
     const near = Math.round(n * 0.35);
     for (let i = 0, guard = 0; i < n && guard < n * 60; guard++) {
       const rad = i < near ? 40 + r() * 150 : 180 + r() * 470, a = r() * 6.283, x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-      if (!openGround(x, z, 15) || (rule && !rule(x, z))) continue;
+      if (!openGround(x, z, 15) || (rule && !rule(x, z)) || (R3 && lavaMask(x, z) > 0.1)) continue;
       const obj = clone(key), s = s0 + r() * (s1 - s0); obj.scale.setScalar(s); const ry = r() * 6.28; obj.position.set(x, hAt(x, z), z); obj.rotation.y = ry;
       obj.traverse(o => { if (o.isMesh) { o.castShadow = true; if (o.material.alphaTest === 0 && o.material.transparent) { o.material = o.material.clone(); o.material.transparent = false; o.material.alphaTest = 0.45; o.material.side = THREE.DoubleSide; } } });
       const node = { id: type + (id++), type, x, z, y: obj.position.y, obj, ready: true, r: type === 'wood' ? 2.4 : 2.0, hp: 3, s };
+      if (type === 'wood' && (R2 || R3)) obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.multiplyScalar(R2 ? 2.1 : 0.32); if (R2) { o.material.emissive = new THREE.Color(0xffe6ee); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 0.12; } } });
       if (deco) deco(node, obj, s); G.scene.add(obj); W.nodes.push(node); i++;
       if (type === 'wood' || type === 'stone') solid(key, { x, z, y: obj.position.y, s, ry }, { node });
     }
   };
-  add('fruit', 'shrub_04', 46, 2.6, 3.4, null, (node, obj, s) => {
-    node.fruits = []; for (let k = 0; k < 4; k++) { const f = clone('food_pomegranate_01'); f.scale.setScalar(3.2 / s * 1.0); const a = k * 1.57 + r(); f.position.set(Math.cos(a) * 0.22, 0.26 + r() * 0.1, Math.sin(a) * 0.22);
+  const FB = R2 ? ['anemone', 1.5, 2.0, 0.42, 1.25] : R3 ? ['thorn_bush', 2.0, 2.6, 0.5, 0.6] : ['shrub_04', 2.6, 3.4, 0.22, 0.26];      // 열매가 열리는 덤불 : 지역마다 다른 식물
+  add('fruit', FB[0], 46, FB[1], FB[2], null, (node, obj, s) => {
+    if (R2) obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.set(0xff9ad0); o.material.emissive = new THREE.Color(0xff6fb0); o.material.emissiveIntensity = 0.25; } });
+    node.fruits = []; for (let k = 0; k < 4; k++) { const f = clone('food_pomegranate_01'); f.scale.setScalar(3.2 / s * 1.0); const a = k * 1.57 + r(); f.position.set(Math.cos(a) * FB[3], FB[4] + r() * 0.1, Math.sin(a) * FB[3]);
       f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xff3b6b); o.material.emissiveIntensity = 0.9; } }); obj.add(f); node.fruits.push(f); }
   });
-  add('wood', 'tree_stump_01', 30, 1.6, 2.4); add('wood', 'dead_tree_trunk_02', 26, 1.3, 2.0);
+  if (R2) add('wood', 'dead_tree_trunk_02', 56, 1.3, 2.0); else { add('wood', 'tree_stump_01', 30, 1.6, 2.4); add('wood', 'dead_tree_trunk_02', 26, 1.3, 2.0); }
   add('stone', R2 ? 'coral_brain' : R3 ? 'obsidian_shards' : 'namaqualand_boulder_02', 44, 1.0, 1.5);
   add('dust', R3 ? 'fire_crystal' : 'flower_gazania', 50, R3 ? 0.8 : 3.0, R3 ? 1.2 : 4.2, null, (node, obj) => { obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xffc44a); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.5; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } }); });
 }
