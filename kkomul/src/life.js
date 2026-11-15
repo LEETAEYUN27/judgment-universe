@@ -1,0 +1,130 @@
+// 살림 : 채집 · 먹기 · 짓기 · 텃밭 · 촌장 퀘스트
+import { THREE, G, clamp, dist2, emit, on } from './g.js';
+import { clone } from './assets.js';
+import { W, hAt, slopeAt, addCollider } from './world.js';
+import { Char } from './player.js';
+import { burst, number, sfx } from './fx.js';
+
+export const ITEM = { fruit: ['별열매', '🍎'], wood: ['나무', '🪵'], stone: ['돌', '🪨'], dust: ['빛가루', '✨'], seed: ['씨앗', '🌱'] };
+export const BUILD = [
+  { k: 'fire', name: '모닥불 화로', model: 'barrel_stove', s: 1.6, cost: { wood: 4, stone: 3 }, desc: '곁에 있으면 체력이 차오름', r: 1.0 },
+  { k: 'farm', name: '텃밭', model: 'planter_box_01', s: 2.2, cost: { wood: 3 }, desc: '씨앗을 심으면 별열매가 열림', r: 0.9 },
+  { k: 'lamp', name: '등불', model: 'Lantern_01', s: 3.0, cost: { wood: 1, dust: 2 }, desc: '주변을 밝힘', r: 0.3 },
+  { k: 'hut', name: '오두막', model: 'hut', s: 1.15, cost: { wood: 14, stone: 8 }, desc: '쓰러지면 여기서 다시 일어남', r: 2.6 },
+];
+const NPCS = [];
+export const QUESTS = [
+  { title: '첫 끼니', goal: '별열매 5개를 따서 촌장에게 가져가기', talk: ['어이쿠, 낯선 꼬물이로구먼. 나는 이 분지의 촌장 「모루」라네.', '여긴 별꽃 분지. 밤마다 풀과 꽃이 빛나는 아름다운 곳이지만… 북서쪽 분화구에 「아귀룡」이 둥지를 튼 뒤로 다들 달아나 버렸지.', '우선 배부터 채우세. 빛나는 덤불에서 별열매를 5개 따 오게. (덤불 앞에서 E)'], check: () => G.inv.fruit >= 5, take: () => { G.inv.fruit -= 5; }, reward: () => { G.inv.seed += 3; G.inv.dust += 2; return '씨앗 3 · 빛가루 2'; }, done: '옳지, 잘 익었구먼! 답례로 씨앗과 빛가루를 주지.' },
+  { title: '불씨', goal: '나무 4 · 돌 3을 모아 모닥불 화로 짓기 (B)', talk: ['밤이 길어. 그루터기와 바위를 도끼로 두드려 나무와 돌을 모으고, 화로를 지어 보게.', '화로 곁에 있으면 다친 몸이 낫는다네. (도끼질 : 마우스 왼쪽 / 짓기 : B)'], check: () => G.builds.some(b => b.k === 'fire'), reward: () => { G.weaponLv++; return '도끼 강화 +1'; }, done: '따뜻하구먼. 자네 도끼날을 벼려 주지. 한결 매서워질 걸세.' },
+  { title: '첫 수확', goal: '텃밭을 짓고 씨앗을 심어 별열매 수확하기', talk: ['따 먹기만 해서는 겨울을 못 나지. 텃밭을 짓고 씨앗을 심어 보게.', '심고 나서 조금 기다리면 열매가 열린다네.'], check: () => G.stats.harvest >= 1, reward: () => { G.inv.fruit += 5; G.inv.seed += 2; return '별열매 5 · 씨앗 2'; }, done: '이제 굶을 걱정은 덜었구먼!' },
+  { title: '새끼 아귀', goal: '숲을 돌아다니는 새끼 아귀 2마리 쓰러뜨리기', talk: ['숲에 아귀룡의 새끼들이 돌아다닌다네. 작다고 얕보면 물리지.', '달려들기 전에 눈이 번쩍하니, 그때 옆으로 굴러 피하고(Shift) 등을 두드리게. 2마리만 쓰러뜨려 보게.'], check: () => G.stats.mobKills >= 2, reward: () => { G.weaponLv++; G.me.maxHp += 25; G.me.hp = G.me.maxHp; return '도끼 강화 +1 · 최대 체력 +25'; }, done: '제법이구먼! 몸놀림이 달라졌어.' },
+  { title: '보금자리', goal: '나무 14 · 돌 8로 오두막 짓기', talk: ['큰 싸움 전에 돌아올 집이 있어야지. 오두막을 지어 두게.', '쓰러지더라도 오두막에서 다시 일어날 수 있다네.'], check: () => G.builds.some(b => b.k === 'hut'), reward: () => { G.weaponLv++; return '도끼 강화 +1'; }, done: '훌륭한 집이야. 이제 준비가 되었구먼.' },
+  { title: '아귀룡', goal: '북서쪽 분화구의 아귀룡 쓰러뜨리기', talk: ['때가 되었네. 북서쪽 그을린 분화구에 아귀룡이 잠들어 있지.', '놈은 우릴 삼키려 들 걸세. 입을 벌리고 뒤로 젖히면 문다는 신호, 몸을 세우고 울부짖으면 돌진한다는 신호야.', '돌진을 큰 바위나 큰 나무 쪽으로 유인해 들이받게 하면 한동안 뻗으니, 그때 머리를 노리게. 꼬리가 치솟으면 뛰어서 고리를 넘고!'], check: () => G.stats.bossDead, reward: () => { G.inv.dust += 20; return '빛가루 20 · 「분지의 수호자」'; }, done: '해냈구먼…! 분지에 다시 별꽃이 필 걸세. 동쪽 산맥 너머 「구름고래 고원」에서도 도움을 청하는 소리가 들린다네. (다음 지역 준비 중)' },
+];
+
+export function initLife() {
+  G.stats = G.stats || { harvest: 0, mobKills: 0, bossDead: false };
+  // 촌장 · 떠돌이 상인
+  const chief = new Char('gureum', { name: '촌장 모루', weapon: false, scale: 1.55 }); const cx = W.spawn.x - 7, cz = W.spawn.z + 3; chief.root.position.set(cx, hAt(cx, cz), cz); chief.root.rotation.y = 1.2;
+  const lamp = clone('Lantern_01'); lamp.scale.setScalar(3); lamp.position.set(cx + 1.4, hAt(cx + 1.4, cz + 0.6), cz + 0.6); G.scene.add(lamp); const pl = new THREE.PointLight(0xffc27a, 14, 22, 1.7); pl.position.set(cx + 1.4, hAt(cx, cz) + 1.2, cz + 0.6); G.scene.add(pl);
+  NPCS.push({ id: 'chief', ch: chief, x: cx, z: cz, r: 3.4 });
+  const mx = W.lake.x - W.lake.r - 26, mz = W.lake.z - 30, mer = new Char('ppiyak', { name: '떠돌이 삐삐', weapon: false, scale: 1.35 }); mer.root.position.set(mx, hAt(mx, mz), mz); NPCS.push({ id: 'merchant', ch: mer, x: mx, z: mz, r: 3.2 });
+  addCollider({ x: cx, z: cz, r: 0.7 }); addCollider({ x: mx, z: mz, r: 0.6 });
+  on('strike', onStrike);
+}
+
+/* ───── 가까운 상호작용 대상 ───── */
+export function nearest(p) {
+  let best = null, bd = 1e9;
+  for (const n of NPCS) { const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && d < bd) { bd = d; best = { kind: 'npc', n, label: n.id === 'chief' ? '촌장과 이야기' : '상인과 거래' }; } }
+  for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : '상자 열기' }; } }
+  for (const b of G.builds) { if (b.k !== 'farm') continue; const d = dist2(p.x, p.z, b.x, b.z); if (d < 2.6 && d < bd) { const st = b.state || 0; if (st === 0 && G.inv.seed > 0) { bd = d; best = { kind: 'farm', b, label: '씨앗 심기' }; } else if (st === 2) { bd = d; best = { kind: 'farm', b, label: '수확하기' }; } } }
+  return best;
+}
+export function interact(t) {
+  if (!t) return;
+  if (t.kind === 'npc') { t.n.id === 'chief' ? talkChief() : talkMerchant(); return; }
+  if (t.kind === 'node') { takeNode(t.n, true); return; }
+  if (t.kind === 'farm') { farmAct(t.b, true); }
+}
+function gain(k, n, pos) { G.inv[k] += n; number(pos.x, pos.y + 1.6, pos.z, `+${n} ${ITEM[k][0]}`, 'gain'); emit('inv'); }
+export function takeNode(n, mine) {
+  if (!n.ready) return; n.ready = false; const p = { x: n.x, y: n.y, z: n.z };
+  if (n.type === 'fruit') { n.fruits.forEach(f => f.visible = false); n.respawn = G.time + 75; if (mine) gain('fruit', 3, p); burst(n.x, n.y + 1.2, n.z, 14, 0xff5a7a, 3, 0.35, 3); }
+  else if (n.type === 'dust') { n.obj.visible = false; n.respawn = G.time + 100; if (mine) gain('dust', 1, p); burst(n.x, n.y + 0.8, n.z, 22, 0xffd45a, 3, 0.4, 4, 2, 1.2); }
+  else if (n.type === 'chest') { n.respawn = Infinity; if (mine) { gain('dust', 5, p); G.inv.seed += 2; G.weaponLv++; emit('toast', '상자에서 빛가루 5 · 씨앗 2를 얻고, 도끼가 한층 날카로워짐!'); } burst(n.x, n.y + 1, n.z, 40, 0x9affe0, 6, 0.5, 6, 6, 1.2); n.obj.rotation.x = -0.25; }
+  if (mine) { sfx.pick(); G.net && G.net.send({ t: 'node', id: n.id }); G.me.ch.st.cheer = 0.5; }
+}
+function onStrike(s) {       // 도끼질 : 그루터기 · 바위
+  for (const n of W.nodes) { if (!n.ready || (n.type !== 'wood' && n.type !== 'stone')) continue; if (dist2(s.x, s.z, n.x, n.z) > s.r + 0.6 * n.s) continue;
+    n.hp--; n.obj.rotation.z = (Math.random() - 0.5) * 0.12; burst(n.x, n.y + 1, n.z, 8, n.type === 'wood' ? 0xc79a5a : 0xb8c4d0, 4, 0.3, 3); sfx.hit(); emit('hitstop', 0.03);
+    if (n.hp <= 0) { n.ready = false; n.obj.visible = false; n.respawn = G.time + 120; n.hp = 3; for (const c of W.colliders) if (c.node === n) c.off = true; gain(n.type, 3, { x: n.x, y: n.y, z: n.z }); sfx.pick(); G.net && G.net.send({ t: 'node', id: n.id }); }
+  }
+}
+export function nodeRemote(id) { const n = W.nodes.find(x => x.id === id); if (!n || !n.ready) return; if (n.type === 'wood' || n.type === 'stone') { n.ready = false; n.obj.visible = false; n.respawn = G.time + 120; for (const c of W.colliders) if (c.node === n) c.off = true; } else takeNode(n, false); }
+export function eat() { if (G.inv.fruit <= 0 || G.me.hp >= G.me.maxHp || G.me.dead) return; G.inv.fruit--; G.me.heal(32); sfx.eat(); number(G.me.pos.x, G.me.pos.y + 1.8, G.me.pos.z, '+32', 'heal'); G.me.ch.st.cheer = 0.4; emit('inv'); }
+
+/* ───── 짓기 ───── */
+export function canAfford(b) { return Object.entries(b.cost).every(([k, v]) => G.inv[k] >= v); }
+export function tryBuild(k) {
+  const b = BUILD.find(x => x.k === k), me = G.me; if (!b) return;
+  if (!canAfford(b)) { emit('toast', '재료가 모자람 : ' + Object.entries(b.cost).map(([k, v]) => `${ITEM[k][0]} ${v}`).join(' · ')); return; }
+  const d = b.r + 2.2, x = me.pos.x + Math.sin(me.yaw) * d, z = me.pos.z + Math.cos(me.yaw) * d;
+  if (slopeAt(x, z) > 0.35 || hAt(x, z) < W.water + 0.3) { emit('toast', '여기는 지을 수 없음. 평평한 땅을 찾아야 함'); return; }
+  if (G.builds.some(o => dist2(o.x, o.z, x, z) < b.r + (BUILD.find(q => q.k === o.k).r) + 0.3)) { emit('toast', '다른 건물과 너무 가까움'); return; }
+  for (const [kk, v] of Object.entries(b.cost)) G.inv[kk] -= v;
+  const item = { k, x: +x.toFixed(2), z: +z.toFixed(2), ry: +(me.yaw + Math.PI).toFixed(2), state: 0, by: me.name }; G.net && G.net.send({ t: 'build', item: Object.assign({}, item) }); placeBuild(item, true); sfx.build(); emit('inv');
+  if (k === 'hut') { G.home = { x: x + Math.sin(me.yaw + Math.PI) * 4, z: z + Math.cos(me.yaw + Math.PI) * 4 }; emit('toast', '오두막 완성! 쓰러지면 여기서 다시 일어남'); }
+}
+export function placeBuild(item, mine) {
+  const b = BUILD.find(x => x.k === item.k), o = clone(b.model); o.scale.setScalar(b.s); o.position.set(item.x, hAt(item.x, item.z), item.z); o.rotation.y = item.ry;
+  o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); G.scene.add(o); item.obj = o; G.builds.push(item);
+  if (item.k !== 'hut') addCollider({ x: item.x, z: item.z, r: b.r, h: 2 });
+  else { const c = Math.cos(item.ry), s = Math.sin(item.ry); for (const [lx, lz] of [[-1.7, 0], [1.7, 0], [0, 1.7], [-1.3, -1.7], [1.3, -1.7]]) addCollider({ x: item.x + lx * b.s * c + lz * b.s * s, z: item.z - lx * b.s * s + lz * b.s * c, r: 0.8, h: 3 }); }
+  if (item.k === 'fire') { const l = new THREE.PointLight(0xff8a3c, 30, 30, 1.6); l.position.set(0, 0.9 / b.s, 0); o.add(l); item.light = l; }
+  if (item.k === 'lamp') { const l = new THREE.PointLight(0xffd08a, 18, 24, 1.7); l.position.set(0, 0.3, 0); o.add(l); o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.emissive = new THREE.Color(0xffb060); m.material.emissiveIntensity = 0.6; } }); }
+  if (item.k === 'farm') { item.sprout = null; if (item.state) setFarm(item, item.state); }
+  burst(item.x, o.position.y + 1, item.z, 30, 0xfff0b0, 5, 0.4, 5);
+}
+function setFarm(b, st) {
+  b.state = st; if (b.sprout) { b.obj.remove(b.sprout); b.sprout = null; }
+  if (st >= 1) { const g = new THREE.Group(), base = BUILD[1].s; for (let i = 0; i < 3; i++) { const p = clone(st === 2 ? 'shrub_04' : 'flower_empodium'); p.scale.setScalar((st === 2 ? 0.9 : 1.2) / base); p.position.set((i - 1) * 0.26, 0.16, 0); g.add(p); if (st === 2) { const f = clone('food_pomegranate_01'); f.scale.setScalar(2.4 / base); f.position.set((i - 1) * 0.26, 0.36, 0.05); f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xff3b6b); o.material.emissiveIntensity = 1; } }); g.add(f); } } b.obj.add(g); b.sprout = g; }
+}
+export function farmAct(b, mine) {
+  if ((b.state || 0) === 0) { if (mine) { if (G.inv.seed <= 0) return; G.inv.seed--; emit('inv'); sfx.pick(); } setFarm(b, 1); b.ripe = G.time + 40; }
+  else if (b.state === 2) { setFarm(b, 0); if (mine) { gain('fruit', 4, { x: b.x, y: hAt(b.x, b.z), z: b.z }); G.inv.seed += 1; G.stats.harvest++; sfx.pick(); } }
+  if (mine && G.net) G.net.send({ t: 'farm', x: b.x, z: b.z });
+}
+export function farmRemote(x, z) { const b = G.builds.find(o => o.k === 'farm' && Math.abs(o.x - x) < 0.1 && Math.abs(o.z - z) < 0.1); if (b) farmAct(b, false); }
+
+/* ───── 대화 · 퀘스트 ───── */
+function talkChief() {
+  const q = QUESTS[G.quest]; if (!q) { emit('dialog', { who: '촌장 모루', lines: ['자네 덕에 분지가 평온하다네. 다음 지역이 열리면 또 부탁하지.'] }); return; }
+  if (G.questProg === 0) { emit('dialog', { who: '촌장 모루', lines: q.talk, end: () => { G.questProg = 1; emit('quest'); sfx.quest(); } }); return; }
+  if (q.check()) { if (q.take) q.take(); const rw = q.reward(); emit('dialog', { who: '촌장 모루', lines: [q.done, `〔보상〕 ${rw}`], end: () => { G.quest++; G.questProg = 0; emit('quest'); emit('inv'); sfx.quest(); G.me.ch.st.cheer = 1.2; save(); if (QUESTS[G.quest]) talkChief(); } }); }
+  else emit('dialog', { who: '촌장 모루', lines: ['아직이구먼. ' + q.goal + '.'] });
+}
+function talkMerchant() {
+  G.stats.hpBuy = G.stats.hpBuy || 0;
+  if (G.stats.hpBuy >= 4) { emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 이제 더 줄 게 없어. 넌 이미 충분히 튼튼해!'] }); return; }
+  if (G.inv.dust >= 4) emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 빛가루 4개를 주면 「튼튼 물약」을 줄게. 최대 체력이 20 늘어나!'], choice: ['바꾼다 (빛가루 4)', '다음에'], pick: i => { if (i === 0) { G.inv.dust -= 4; G.me.maxHp += 20; G.me.hp = G.me.maxHp; G.stats.hpBuy++; emit('inv'); sfx.quest(); emit('toast', '최대 체력 +20'); save(); } } });
+  else emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 난 온 세상을 떠도는 상인이야. 빛나는 꽃에서 빛가루를 4개 모아 오면 「튼튼 물약」으로 바꿔 줄게.', '참, 청록빛 큰 바람꽃을 밟으면 하늘섬까지 날아오를 수 있어. 섬마다 보물 상자가 있다구!'] });
+}
+
+/* ───── 시간에 따른 갱신 ───── */
+export function updateLife(dt) {
+  for (const n of NPCS) { n.ch.update(dt); if (G.me) { const d = dist2(G.me.pos.x, G.me.pos.z, n.x, n.z); if (d < 9) n.ch.root.rotation.y += (Math.atan2(G.me.pos.x - n.x, G.me.pos.z - n.z) - n.ch.root.rotation.y) * Math.min(1, dt * 4); } }
+  if ((G.frame & 31) === 0) {
+    for (const n of W.nodes) if (!n.ready && n.respawn && G.time > n.respawn) { n.ready = true; n.obj.visible = true; if (n.fruits) n.fruits.forEach(f => f.visible = true); for (const c of W.colliders) if (c.node === n) c.off = false; }
+    for (const b of G.builds) if (b.k === 'farm' && b.state === 1 && G.time > (b.ripe || 0)) setFarm(b, 2);
+  }
+  if (G.me && !G.me.dead) for (const b of G.builds) if (b.k === 'fire') { if (dist2(G.me.pos.x, G.me.pos.z, b.x, b.z) < 7 && G.me.hp < G.me.maxHp) G.me.heal(7 * dt); if (b.light) b.light.intensity = 28 + Math.sin(G.time * 11) * 5 + Math.sin(G.time * 23) * 3; if (Math.random() < dt * 14) burst(b.x, hAt(b.x, b.z) + 1.4, b.z, 1, 0xff9a3c, 0.6, 0.3, 2.5, -1, 0.9); }
+}
+
+/* ───── 저장 ───── */
+export function save() {
+  try { localStorage.setItem('mochi_save', JSON.stringify({ inv: G.inv, weaponLv: G.weaponLv, quest: G.quest, questProg: G.questProg, stats: G.stats, maxHp: G.me ? G.me.maxHp : 100, home: G.home, builds: G.net && !G.net.host ? [] : G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })) })); } catch (e) { }
+}
+export function load() {
+  try { const s = JSON.parse(localStorage.getItem('mochi_save') || 'null'); if (!s) return false; Object.assign(G.inv, s.inv); G.weaponLv = s.weaponLv || 0; G.quest = s.quest || 0; G.questProg = s.questProg || 0; G.stats = Object.assign({ harvest: 0, mobKills: 0, bossDead: false }, s.stats); G.home = s.home || null; G._maxHp = s.maxHp; G._builds = s.builds || []; return true; } catch (e) { return false; }
+}

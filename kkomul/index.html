@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>꼬물족 이야기 — 별꽃 분지</title>
+<meta name="description" content="작고 하찮은 꼬물족이 광활한 꿈속 세상에서 살아남는 이야기">
+<meta name="theme-color" content="#0b1830">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&display=swap">
+<style>
+:root{--paper:#fbf3df;--paper2:#f3e6c6;--ink:#4a3424;--ink2:#7a5a40;--line:#c9ae84;--red:#e8604c;--green:#5fb36a;--teal:#2fc7ad;--gold:#f2b63c;--f:"Jua","Noto Sans KR",sans-serif;--h:"Gaegu","Jua",sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b1830;font-family:var(--f);color:var(--ink);overscroll-behavior:none;touch-action:none}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+input{font-family:inherit;user-select:text;-webkit-user-select:text}
+.sheet{background:var(--paper);border:2.5px solid var(--ink);border-radius:18px 22px 16px 24px/22px 16px 24px 18px;box-shadow:4px 5px 0 rgba(40,24,12,.55)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:46px;padding:0 20px;font-size:18px;background:var(--gold);border:2.5px solid var(--ink);border-radius:14px 18px 13px 17px/17px 13px 18px 14px;box-shadow:3px 4px 0 rgba(40,24,12,.6);transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translate(2px,3px);box-shadow:1px 1px 0 rgba(40,24,12,.6)} .btn.alt{background:#fff8e6} .btn.teal{background:#8fe6d3} .btn[disabled]{opacity:.45;pointer-events:none}
+/* 시작 화면 */
+#start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:14px;background:radial-gradient(120% 90% at 50% 0%,rgba(11,24,48,0) 0%,rgba(11,24,48,.55) 100%);z-index:30}
+#start .box{width:min(560px,100%);max-height:100%;overflow:auto;padding:20px 22px 18px;touch-action:pan-y}
+#start h1{font-family:var(--h);font-weight:700;font-size:40px;line-height:1;margin:0;letter-spacing:-.01em} #start h1 small{display:block;font-family:var(--f);font-size:15px;color:var(--ink2);margin-top:8px;font-weight:400}
+#start p.lore{font-family:var(--h);font-size:18px;line-height:1.45;color:var(--ink2);margin:12px 0 14px;padding:10px 12px;border:2px dashed var(--line);border-radius:12px;background:#fffaf0}
+.lab{font-size:14px;color:var(--ink2);margin:12px 0 6px}
+#name,#code{height:44px;border:2.5px solid var(--ink);border-radius:12px;padding:0 12px;font-size:18px;background:#fff;color:var(--ink);width:100%;outline:0}
+#chars{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+#chars button{border:2.5px solid var(--line);border-radius:14px;background:#fff8e6;padding:3px 2px 5px;font-size:12px;line-height:1.15;opacity:.55;filter:saturate(.5);transition:all .15s}
+#chars button img{width:100%;aspect-ratio:1/1.05;object-fit:cover;border-radius:10px;display:block;margin-bottom:3px;background:#cfe9f7}
+#chars button.on{border-color:var(--ink);background:var(--gold);opacity:1;filter:none;transform:translateY(-4px) rotate(-1.5deg);box-shadow:2px 4px 0 rgba(40,24,12,.5)}
+.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap} .row .btn{flex:1;min-width:150px} .row #code{flex:1;min-width:110px;text-transform:uppercase;letter-spacing:.15em;text-align:center}
+#load{height:14px;border:2.5px solid var(--ink);border-radius:9px;background:#fff;overflow:hidden;margin-top:14px} #load i{display:block;height:100%;width:0;background:repeating-linear-gradient(45deg,var(--teal) 0 10px,#7fe3d2 10px 20px);transition:width .2s}
+#loadTxt,#err{font-size:13px;color:var(--ink2);margin-top:6px;min-height:18px} #err{color:var(--red)}
+/* 게임 화면 */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none} #hud.on{display:block}
+#hud>*{position:absolute}
+#me{left:max(12px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));padding:8px 12px 9px;min-width:210px}
+#me .nm{font-size:15px;display:flex;justify-content:space-between;gap:10px} #me .nm span{color:var(--ink2);font-size:12.5px}
+.bar{height:15px;border:2px solid var(--ink);border-radius:8px;background:#fff;overflow:hidden;margin-top:5px;position:relative} .bar i{position:absolute;inset:0;width:100%;transform-origin:left;background:var(--red);transition:transform .15s} .bar.st{height:9px} .bar.st i{background:var(--teal)}
+#quest{right:max(12px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));padding:8px 12px 9px;width:min(250px,46vw)} #quest b{font-family:var(--h);font-size:20px;display:block;line-height:1.1} #quest span{font-size:13px;color:var(--ink2);line-height:1.35;display:block;margin-top:3px} #quest em{font-style:normal;font-size:12px;color:var(--teal);display:block;margin-top:4px}
+#inv{left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:6px;padding:6px 10px}
+#inv div{display:flex;align-items:center;gap:4px;font-size:16px;padding:2px 6px;border-radius:9px} #inv div b{font-size:17px;min-width:18px;text-align:right} #inv div.bump{animation:bump .3s}
+@keyframes bump{40%{transform:scale(1.3) rotate(-6deg);background:var(--gold)}}
+#prompt{left:50%;bottom:118px;transform:translateX(-50%);padding:7px 16px;font-size:17px;white-space:nowrap;display:none} #prompt kbd{font-family:inherit;background:var(--ink);color:var(--paper);border-radius:6px;padding:1px 8px;margin-right:6px}
+#boss{left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);width:min(520px,60vw);display:none;text-align:center} #boss b{font-family:var(--h);font-size:24px;color:#fff;text-shadow:0 2px 0 #3a0d0d,0 0 14px #ff4a2e;letter-spacing:.06em}
+#boss .bar{height:18px;border-color:#2a0c0c;background:#3a1512} #boss .bar i{background:linear-gradient(#ff6a3c,#c8281e)}
+#room{left:max(12px,env(safe-area-inset-left));top:104px;padding:5px 10px;font-size:13px;display:none} #room b{letter-spacing:.14em;font-size:16px}
+#toasts{left:50%;top:22%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;width:min(560px,92vw)} .toast{padding:8px 16px;font-size:16px;animation:pop .25s;text-align:center}
+@keyframes pop{from{transform:scale(.7);opacity:0}}
+#help{left:max(12px,env(safe-area-inset-left));bottom:max(64px,calc(env(safe-area-inset-bottom) + 64px));padding:8px 12px;font-size:12.5px;line-height:1.7;color:var(--ink2);opacity:.92} #help kbd{font-family:inherit;background:var(--ink);color:var(--paper);border-radius:5px;padding:0 6px;font-size:11.5px}
+#fxlayer{inset:0;overflow:hidden} .dmg{position:absolute;font-family:var(--h);font-weight:700;font-size:30px;color:#fff;text-shadow:0 2px 0 #40200f,0 0 8px rgba(0,0,0,.5);animation:rise .9s forwards;transform:translate(-50%,-50%);white-space:nowrap} .dmg.crit{font-size:42px;color:#ffd84a} .dmg.gain{font-size:22px;color:#b9ffd0} .dmg.heal{color:#8dffb0;font-size:24px}
+@keyframes rise{0%{opacity:0;margin-top:10px;transform:translate(-50%,-50%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.25)}100%{opacity:0;margin-top:-70px;transform:translate(-50%,-50%) scale(1)}}
+#hurt{inset:0;background:radial-gradient(ellipse at center,rgba(255,0,0,0) 45%,rgba(255,30,10,.55) 100%);opacity:0;transition:opacity .25s}
+#dead{inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,6,6,.55)} #dead div{padding:18px 30px;text-align:center;font-family:var(--h);font-size:30px} #dead small{display:block;font-family:var(--f);font-size:15px;color:var(--ink2);margin-top:6px}
+#dialog{left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(680px,94vw);padding:14px 18px 14px;display:none;pointer-events:auto;z-index:5}
+#dialog .who{position:absolute;top:-17px;left:18px;background:var(--ink);color:var(--paper);padding:3px 14px;border-radius:10px;font-size:15px} #dialog p{font-family:var(--h);font-size:22px;line-height:1.4;margin:6px 0 10px;min-height:62px} #dialog .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap} #dialog .btn{height:40px;font-size:16px}
+#build{left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(640px,94vw);padding:12px 14px;display:none;pointer-events:auto;z-index:5} #build h3{font-family:var(--h);font-size:24px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center} #build h3 button{font-size:14px;color:var(--ink2)}
+#build .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px} #build .it{text-align:left;padding:8px 10px;border:2.5px solid var(--ink);border-radius:12px;background:#fff8e6;font-size:16px;line-height:1.3} #build .it small{display:block;font-size:12.5px;color:var(--ink2)} #build .it.no{opacity:.5} #build .it b{color:var(--teal);font-size:13px;display:block}
+/* 터치 */
+#touch{display:none;inset:0} body.mobile #touch{display:block} body.mobile #help{display:none} body.mobile #inv{bottom:auto;top:max(84px,calc(env(safe-area-inset-top) + 74px));left:max(12px,env(safe-area-inset-left));transform:none;flex-direction:column;gap:0;padding:4px 6px} body.mobile #inv div{font-size:13px} body.mobile #room{top:auto;bottom:150px}
+body.mobile #prompt{bottom:190px}
+#joy{position:absolute;left:max(22px,env(safe-area-inset-left));bottom:max(26px,env(safe-area-inset-bottom));width:132px;height:132px;border-radius:50%;background:rgba(251,243,223,.22);border:2.5px solid rgba(251,243,223,.65);pointer-events:auto} #knob{position:absolute;left:36px;top:36px;width:56px;height:56px;border-radius:50%;background:rgba(251,243,223,.85);border:2.5px solid var(--ink)}
+.tb{position:absolute;pointer-events:auto;border-radius:50%;background:rgba(251,243,223,.85);border:2.5px solid var(--ink);font-size:15px;display:flex;align-items:center;justify-content:center;box-shadow:2px 3px 0 rgba(40,24,12,.5)} .tb.on{transform:scale(.9);background:var(--gold)}
+#tA{right:max(22px,env(safe-area-inset-right));bottom:max(34px,env(safe-area-inset-bottom));width:84px;height:84px;font-size:18px;background:rgba(242,182,60,.92)} #tJ{right:112px;bottom:26px;width:66px;height:66px} #tD{right:38px;bottom:128px;width:66px;height:66px} #tE{right:118px;bottom:104px;width:54px;height:54px;font-size:13px} #tB{right:186px;bottom:30px;width:50px;height:50px;font-size:13px} #tF{right:22px;bottom:204px;width:50px;height:50px;font-size:13px}
+@media (max-width:640px){#quest{font-size:12px} #quest b{font-size:17px} #me{min-width:160px} #start h1{font-size:32px} #chars{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="start"><div class="box sheet">
+  <h1>꼬물족 이야기<small>제1장 · 별꽃 분지</small></h1>
+  <p class="lore">밤마다 풀과 꽃이 빛나는 꿈결 같은 분지. 손바닥만 한 꼬물족은 열매를 따고 밭을 일구며 살았으나, 분화구에 둥지를 튼 거대한 「아귀룡」이 모두를 삼키려 든다. 작고 하찮은 우리가, 이 넓은 세상에서 살아남을 수 있을까?</p>
+  <div class="lab">이름</div><input id="name" maxlength="8" placeholder="이름 (8자까지)">
+  <div class="lab">꼬물족 고르기</div><div id="chars"></div>
+  <div class="row"><button class="btn" id="solo" disabled>혼자 시작</button><button class="btn teal" id="host" disabled>방 만들기 (친구와 같이)</button></div>
+  <div class="row"><input id="code" maxlength="5" placeholder="방 코드"><button class="btn alt" id="join" disabled>코드로 들어가기</button></div>
+  <div id="load"><i></i></div><div id="loadTxt">세상을 불러오는 중…</div><div id="err"></div>
+</div></div>
+
+<div id="hud">
+  <div id="hurt"></div><div id="fxlayer"></div>
+  <div id="me" class="sheet"><div class="nm"><b id="meName"></b><span id="meHp"></span></div><div class="bar"><i id="hpBar"></i></div><div class="bar st"><i id="stBar"></i></div></div>
+  <div id="room" class="sheet">방 코드 <b id="roomCode"></b> · <span id="roomN">1</span>명</div>
+  <div id="quest" class="sheet"><b id="qTitle"></b><span id="qGoal"></span><em id="qHint"></em></div>
+  <div id="boss"><b id="bossName">아귀룡</b><div class="bar"><i id="bossBar"></i></div></div>
+  <div id="toasts"></div>
+  <div id="prompt" class="sheet"></div>
+  <div id="inv" class="sheet"></div>
+  <div id="help" class="sheet"><kbd>WASD</kbd> 이동 · <kbd>Space</kbd> 점프(2단) · <kbd>Shift</kbd> 구르기<br><kbd>왼쪽 클릭</kbd> 도끼질 · <kbd>E</kbd> 줍기/대화 · <kbd>B</kbd> 짓기 · <kbd>F</kbd> 열매 먹기</div>
+  <div id="dead"><div class="sheet">꿀꺽… 쓰러짐<small>잠시 뒤 보금자리에서 다시 일어남</small></div></div>
+  <div id="dialog" class="sheet"><span class="who" id="dWho"></span><p id="dText"></p><div class="acts" id="dActs"></div></div>
+  <div id="build" class="sheet"><h3>무엇을 지을까 <button id="bClose">닫기 (B)</button></h3><div class="grid" id="bGrid"></div></div>
+  <div id="touch"><div id="joy"><div id="knob"></div></div>
+    <button class="tb" id="tA" data-act="attack">도끼</button><button class="tb" id="tJ" data-act="jump">점프</button><button class="tb" id="tD" data-act="dash">구르기</button><button class="tb" id="tE" data-act="interact">줍기</button><button class="tb" id="tB" data-act="build">짓기</button><button class="tb" id="tF" data-act="eat">먹기</button></div>
+</div>
+
+<script src="vendor/peerjs.min.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
+<script type="module" src="src/main.js?v=1"></script>
+</body>
+</html>
