@@ -29,6 +29,10 @@ export class Char {
     h.position.set(-0.06, -0.10, 0.06); h.rotation.set(1.2, 0, 0); (this.n.armR || this.model).add(h); this.weapon = h;
     w.traverse(o => { if (o.isMesh) o.castShadow = true; });
   }
+  glide(on, dt) {      // 바람꽃 우산 : 공중에서 점프를 누르고 있으면 펼쳐져 천천히 내려옴
+    if (!this.para) { if (!on) return; const f = clone('flower_gazania'); f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; o.material.emissive = new THREE.Color(0x35ffd0); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 0.9; } }); f.position.y = 1.75 * this.scale; f.rotation.x = Math.PI; this.root.add(f); this.para = f; this.paraK = 0; }
+    this.paraK = damp(this.paraK, on ? 1 : 0, 14, dt); this.para.visible = this.paraK > 0.03; this.para.scale.setScalar(2.4 * this.paraK * this.scale / 1.25); this.para.rotation.y += dt * 2.5; this.para.rotation.z = Math.sin(G.time * 3) * 0.08;
+  }
   setName(name) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '700 30px Jua, "Noto Sans KR", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = 7; g.strokeStyle = 'rgba(20,24,40,.85)'; g.strokeText(name, 128, 34); g.fillStyle = '#fff8e8'; g.fillText(name, 128, 34);
@@ -129,6 +133,7 @@ export class Player {
       }
       if (ml > 0.1 && this.atk < 0) this.yaw = dampAng(this.yaw, Math.atan2(mx, mz), 16, dt);
       this.vel.y -= T.gravity * dt * (this.vel.y < 0 ? 1.25 : 1);
+      this.gliding = canAct && !this.grounded && !swim && this.vel.y < -2 && (I.keys.Space || I.hold) && !this.grabbed; if (this.gliding) this.vel.y = Math.max(this.vel.y, -3.4);
     }
     // 점프
     this.coyote = this.grounded ? 0.12 : this.coyote - dt;
@@ -171,6 +176,7 @@ export class Player {
   sync(dt) {
     const s = this.ch.st; s.speed = Math.hypot(this.vel.x, this.vel.z); s.grounded = this.grounded; s.vy = this.vel.y; s.dash = this.dashT; s.atk = this.atk; s.combo = this.combo;
     this.ch.root.position.copy(this.pos); this.ch.root.rotation.y = this.yaw; this.ch.root.visible = !(this.inv > 0 && !this.dead && Math.floor(G.time * 18) % 2 === 0 && this.dashT <= 0 && this.inv < 0.85);
+    if (this.dashT > 0 || this.grounded) this.gliding = false; this.ch.glide(!!this.gliding, dt);
     this.ch.update(dt);
   }
   camera(dt) {
@@ -193,11 +199,11 @@ export class Player {
 /* ───── 다른 플레이어 (받은 상태를 부드럽게 따라감) ───── */
 export class Remote {
   constructor(id, kind, name) { this.id = id; this.ch = new Char(kind, { name }); this.pos = new THREE.Vector3(0, -100, 0); this.to = new THREE.Vector3(); this.yaw = 0; this.toYaw = 0; this.first = true; this.hp = 100; this.last = performance.now(); }
-  set(m) { this.to.set(m.x, m.y, m.z); this.toYaw = m.yaw; const s = this.ch.st; s.grounded = !!m.g; s.dash = m.d ? 0.1 : 0; if (m.a >= 0 && s.atk < 0) s.atk = 0; s.combo = m.c || 0; s.dead = !!m.dead; this.hp = m.hp; if (this.first) { this.pos.copy(this.to); this.first = false; } this.last = performance.now(); if (m.hit) this.ch.hit(); }
+  set(m) { this.to.set(m.x, m.y, m.z); this.toYaw = m.yaw; const s = this.ch.st; s.grounded = !!m.g; s.dash = m.d ? 0.1 : 0; if (m.a >= 0 && s.atk < 0) s.atk = 0; s.combo = m.c || 0; s.dead = !!m.dead; this.gl = !!m.gl; this.hp = m.hp; if (this.first) { this.pos.copy(this.to); this.first = false; } this.last = performance.now(); if (m.hit) this.ch.hit(); }
   update(dt) {
     const s = this.ch.st, before = V.copy(this.pos); this.pos.lerp(this.to, 1 - Math.exp(-12 * dt)); this.yaw = dampAng(this.yaw, this.toYaw, 12, dt);
     s.speed = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 0.001); s.vy = (this.pos.y - before.y) / Math.max(dt, 0.001);
     if (s.atk >= 0) { s.atk += dt / 0.36; if (s.atk >= 1) s.atk = -1; }
-    this.ch.root.position.copy(this.pos); this.ch.root.rotation.y = this.yaw; this.ch.update(dt);
+    this.ch.root.position.copy(this.pos); this.ch.root.rotation.y = this.yaw; this.ch.glide(this.gl, dt); this.ch.update(dt);
   }
 }

@@ -52,7 +52,7 @@ export class Net {
   world(m) { if (m.t === 'node') nodeRemote(m.id); else if (m.t === 'build') placeBuild(m.item, false); else if (m.t === 'farm') farmRemote(m.x, m.z); }
   update(dt) {
     this.sendT -= dt; const me = G.me;
-    if (this.sendT <= 0) { this.sendT = 0.066; const m = { t: 'p', id: this.id, x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), yaw: +me.yaw.toFixed(2), g: me.grounded ? 1 : 0, d: me.dashT > 0 ? 1 : 0, a: me.atk >= 0 && me.atk < 0.2 ? 0 : -1, c: me.combo, hp: Math.round(me.hp), dead: me.dead ? 1 : 0, hit: me.ch.flash > 0.8 ? 1 : 0 }; this.send(m); }
+    if (this.sendT <= 0) { this.sendT = 0.066; const m = { t: 'p', id: this.id, x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), yaw: +me.yaw.toFixed(2), g: me.grounded ? 1 : 0, gl: me.gliding ? 1 : 0, d: me.dashT > 0 ? 1 : 0, a: me.atk >= 0 && me.atk < 0.2 ? 0 : -1, c: me.combo, hp: Math.round(me.hp), dead: me.dead ? 1 : 0, hit: me.ch.flash > 0.8 ? 1 : 0 }; this.send(m); }
     if (this.host) { this.bossT -= dt; if (this.bossT <= 0) { this.bossT = 0.1; const list = [G.boss.snapshot()]; for (const w of G.mobs) if (w.st !== 'sleep' || w.hp < w.maxHp) list.push(w.snapshot()); this.cast({ t: 'boss', list }); } }
     for (const r of G.others.values()) r.update(dt);
   }

@@ -16,7 +16,7 @@ export class Wyrm {
     const src = G.assets[this.model || 'agwi']; this.group = new THREE.Group(); G.scene.add(this.group);
     const mk = name => { const n = pick(src, name).clone(true); n.position.set(0, 0, 0); n.scale.setScalar(S); n.traverse(m => { if (m.isMesh) { m.castShadow = true; m.material = m.material.clone(); m.material.envMapIntensity = 0.4; } }); this.group.add(n); return n; };
     this.headN = mk('head'); this.jawN = pick(this.headN, 'jaw'); this.segN = []; this.legs = []; this.mats = [];
-    for (let i = 0; i < this.segs; i++) { const s = mk('seg'); const k = i < this.segs - 4 ? 1 - Math.abs(i - this.segs * 0.35) / this.segs * 0.55 : lerp(0.8, 0.35, (i - (this.segs - 4)) / 4); s.scale.setScalar(S * k); s.userData.k = k; this.segN.push(s); }
+    for (let i = 0; i < this.segs; i++) { const s = mk(this.fly && (i === 1 || i === 2 || i === Math.round(this.segs * 0.55)) && pick(src, 'segF') ? 'segF' : 'seg'); if (this.fly && i === Math.round(this.segs * 0.55)) s.userData.fk = 0.6; const k = i < this.segs - 4 ? 1 - Math.abs(i - this.segs * 0.35) / this.segs * 0.55 : lerp(0.8, 0.35, (i - (this.segs - 4)) / 4); s.scale.setScalar(S * k); s.userData.k = k; this.segN.push(s); }
     this.tailN = mk('tail'); this.tailN.scale.setScalar(S * 0.5);
     if (!this.fly) for (let i = 1; i < this.segs - 4; i += 2) for (const side of [1, -1]) { const u = mk('legU'), l = mk('legL'); this.legs.push({ seg: i, side, u, l, foot: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1, init: false }); }
     this.group.traverse(m => { if (m.isMesh) this.mats.push(m.material); });

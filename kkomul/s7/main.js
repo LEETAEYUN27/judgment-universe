@@ -167,6 +167,7 @@ function tick(dt, now) {
   me.update(dt);
   for (const w of allWyrms()) { w.update(dt, host); w.hazards(me); }
   if (G.net) G.net.update(dt);
+  { const b = G.boss; if (b.alive && b.st === 'inhale' && (G.frame % 2) === 0) { const d = 6 + Math.random() * 34, a2 = b.yaw + (Math.random() - 0.5) * 1.2, x = b.head.x + Math.sin(a2) * d, z = b.head.z + Math.cos(a2) * d; burst(x, hAt(x, z) + 0.5 + Math.random() * 3, z, 3, 0xd9c8ff, 2, 0.35, 1, -3, 0.7); } }
   updateLife(dt); if ((G.frame & 7) === 0) target = nearest(me.pos);
   updateWorld(dt, me.pos); updateFx(dt);
   if (now - lastSave > 20000) { lastSave = now; save(); }
