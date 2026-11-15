@@ -32,7 +32,7 @@ async function boot() {
   const r = new THREE.WebGLRenderer({ canvas, antialias: !G.mobile, powerPreference: 'high-performance' }); G.renderer = r;
   const lite = new URLSearchParams(location.search).has('lite'); G.lite = lite; r.setPixelRatio(lite ? 0.6 : Math.min(devicePixelRatio, G.mobile ? 1.25 : 1.5)); r.setSize(innerWidth, innerHeight); r.shadowMap.enabled = !lite; r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.2;
   G.scene = new THREE.Scene(); G.camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, 2400);
-  const comp = new EffectComposer(r); comp.addPass(new RenderPass(G.scene, G.camera)); const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.7, 0.86); comp.addPass(bloom); comp.addPass(new ShaderPass(GRADE)); comp.addPass(new OutputPass()); G.composer = comp;
+  const comp = new EffectComposer(r); comp.addPass(new RenderPass(G.scene, G.camera)); const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.7, 0.86); comp.addPass(bloom); G.bloom = bloom; comp.addPass(new ShaderPass(GRADE)); comp.addPass(new OutputPass()); G.composer = comp;
   addEventListener('resize', () => { r.setSize(innerWidth, innerHeight); comp.setSize(innerWidth, innerHeight); G.camera.aspect = innerWidth / innerHeight; G.camera.updateProjectionMatrix(); });
   startUI();
   await loadAll(p => { $('#load i').style.width = Math.round(p * 86) + '%'; });
@@ -47,7 +47,7 @@ async function boot() {
   if (auto) { if (auto.code) $('#code').value = auto.code; begin(auto.mode, auto.code, 12); }
 }
 function startUI() {
-  if (G.region === 2) { $('#chap').textContent = '제2장 · 구름고래 고원'; $('#lore').textContent = '골짜기마다 구름 바다가 흐르고 노을이 오래 머무는 하늘 고원. 바람문을 건너온 꼬물족 앞에, 하늘을 헤엄치다 내려와 모두를 통째로 들이마시는 구름고래 「먹구름」이 나타난다.'; }
+  if (G.region === 2) { $('#chap').textContent = '제2장 · 구름고래 하늘바다'; $('#lore').textContent = '머리 위에는 바다가 걸려 있고 발밑은 뭉게구름인 거꾸로 된 세상. 산호가 나무처럼 자라고 해파리가 등불처럼 떠다닌다. 그 하늘 바다에서, 등에 산호를 인 구름고래 「먹구름」이 내려와 모두를 통째로 들이마시려 한다.'; }
   if (G.region === 3) { $('#chap').textContent = '제3장 · 잠든 화산섬'; $('#lore').textContent = '바다 한가운데 솟은 검은 화산섬. 오래 잠들어 있던 분화구에서 용암지네 「불등」이 깨어나 밤마다 불비를 내린다. 온천에서 몸을 추스르고, 용암 웅덩이를 피해 분화구 바닥까지 내려가야 한다.'; }
   { const row = $('#regRow'); row.innerHTML = ''; const open = (() => { try { return regionsOpen(); } catch (e) { return [1]; } })().filter(r => r !== G.region);
     if (open.length) { row.style.display = 'flex'; for (const to of open) { const b = document.createElement('button'); b.className = 'btn alt'; b.textContent = `제${to}장 「${REGNAME[to]}」`; b.onclick = () => { try { localStorage.setItem('mochi_region', String(to)); } catch (e) { } const q = new URLSearchParams(location.search); q.delete('map'); const qs = q.toString(); location.href = location.pathname + (qs ? '?' + qs : ''); }; row.appendChild(b); } } }
@@ -150,7 +150,7 @@ function questDir() {
   const f = G.camera.getWorldDirection(new THREE.Vector3()), a = Math.atan2(f.z * dx - f.x * dz, f.x * dx + f.z * dz);
   el.style.display = 'flex'; $('#qArrow').style.transform = `rotate(${(-a * 57.3).toFixed(0)}deg)`; $('#qDist').textContent = `${qT.n} ${Math.round(d)}걸음`;
 }
-function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '잠든 화산섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 고원을 지켜 냄. 바람문으로 잠든 화산섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 고원에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
+function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '잠든 화산섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 하늘바다을 지켜 냄. 바람문으로 잠든 화산섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 하늘바다에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
 // 한마디 : 숫자 1~4 (머리 위 말풍선, 같은 방 친구에게도 보임)
 const SAY = ['👋 안녕!', '🆘 도와줘!', '➡️ 이리 와!', '😆 ㅋㅋㅋ']; let sayT = 0;
 function bubble(pos, text) { number(pos.x, pos.y + 2.6, pos.z, text, 'say'); }

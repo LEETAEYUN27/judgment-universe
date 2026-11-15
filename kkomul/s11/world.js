@@ -1,6 +1,7 @@
-// 지역(1 별꽃 분지 · 2 구름고래 고원) : 지형 · 하늘 · 물 · 식생 · 떠 있는 섬 · 자원
+// 지역(1 별꽃 분지 · 2 구름고래 하늘바다) : 지형 · 하늘 · 물 · 식생 · 떠 있는 섬 · 자원
 import { THREE, G, clamp, lerp, rng, dist2, ease } from './g.js';
 import { parts, clone, bounds } from './assets.js';
+import { build2, update2 } from './world2.js';
 
 export const W = {
   size: 1500, res: 300, half: 750, limit: 690, water: 0,
@@ -9,22 +10,25 @@ export const W = {
 };
 
 const R3 = G.region === 3; if (R3) Object.assign(W, { lake: { x: 250, z: 230, r: 62 }, arena: { x: -300, z: -300, r: 112 }, name: '잠든 화산섬', lavas: [] });
-const R2 = G.region === 2; if (R2) Object.assign(W, { lake: { x: -230, z: 270, r: 70 }, arena: { x: 340, z: -330, r: 120 }, name: '구름고래 고원' });
+const R2 = G.region === 2; if (R2) Object.assign(W, { lake: { x: -230, z: 270, r: 70 }, arena: { x: 340, z: -330, r: 120 }, name: '구름고래 하늘바다' });
 /* ───── 높이 함수 ───── */
 const P = new Uint8Array(512); { const r = rng(20261115); for (let i = 0; i < 256; i++) P[i] = i; for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [P[i], P[j]] = [P[j], P[i]]; } for (let i = 0; i < 256; i++) P[256 + i] = P[i]; }
 const hash = (x, y) => P[(P[x & 255] + y) & 255] / 255;
 function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), u), lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), u), v); }
 export function fbm(x, y, o = 5) { let a = 0.5, f = 1, s = 0; for (let i = 0; i < o; i++) { s += a * vnoise(x * f, y * f); a *= 0.5; f *= 2.03; } return s; }
-function rawHeight2(x, z) {      // 2지역 : 계단처럼 층진 고원 + 구름 바다가 흐르는 깊은 골짜기
-  let h = 24 + fbm(x * 0.0036 + 31, z * 0.0036 + 17, 5) * 78;
-  const st = 15, q = h / st, fl = Math.floor(q); h = (fl + ease(clamp((q - fl - 0.3) / 0.4, 0, 1))) * st * 0.8 + h * 0.2;                 // 층진 단구
-  h += fbm(x * 0.02 + 3, z * 0.02 + 8, 3) * 3;
-  const rd = Math.abs(fbm(x * 0.0021 + 70, z * 0.0021 + 90, 4) - 0.5) * 2, cut = ease(clamp(1 - rd / 0.075, 0, 1)); h = lerp(h, -13 + rd * 60, cut);   // 골짜기
-  const dc = Math.hypot(x, z), sp = ease(clamp(1 - dc / 125, 0, 1)); h = lerp(h, 38 + fbm(x * 0.03, z * 0.03, 2) * 1.2, sp);          // 마을 터
-  const dl = dist2(x, z, W.lake.x, W.lake.z), lk = ease(clamp(1 - dl / (W.lake.r * 1.5), 0, 1)); h = lerp(h, -8 + dl * 0.08, lk);     // 구름 샘
-  const da = dist2(x, z, W.arena.x, W.arena.z), ar = ease(clamp((1 - da / (W.arena.r * 1.45)) * 2.6, 0, 1)); h = lerp(h, 74 + fbm(x * 0.02, z * 0.02, 2) * 2.5, ar);   // 바람골 : 높고 평평한 대지
-  const edge = clamp((dc - 620) / 130, 0, 1); h += edge * edge * (110 + fbm(x * 0.012 + 5, z * 0.012 + 5, 3) * 80);
-  return h;
+function rawHeight2(x, z) {      // 2지역 : 하늘 바다 아래 펼쳐진 뭉게구름 땅. 구름 덩어리 사이는 안개 바다(높이 0)
+  const dc = Math.hypot(x, z);
+  let h = 26 + fbm(x * 0.004 + 31, z * 0.004 + 17, 4) * 36;                                                    // 큰 굴곡
+  const wx = fbm(x * 0.01 + 3, z * 0.01 + 8, 2) * 5, wz = fbm(x * 0.01 + 60, z * 0.01 + 20, 2) * 5;
+  h += Math.abs(Math.sin(x * 0.085 + wx)) * Math.abs(Math.sin(z * 0.085 + wz)) * 6.5;                          // 뭉게뭉게한 둔덕
+  h += Math.abs(Math.sin(x * 0.27 + wz * 2)) * Math.abs(Math.sin(z * 0.27 + wx * 2)) * 1.1;
+  let k = ease(clamp((fbm(x * 0.0042 + 70, z * 0.0042 + 90, 3) - 0.40) / 0.075, 0, 1));                         // 구름 덩어리 / 틈
+  k = Math.max(k, ease(clamp(1 - dc / 190, 0, 1)), ease(clamp(1 - dist2(x, z, W.arena.x, W.arena.z) / (W.arena.r * 1.7), 0, 1)), ease(clamp(1 - dist2(x, z, W.lake.x, W.lake.z) / (W.lake.r * 2.6), 0, 1)));
+  k *= 1 - ease(clamp((dc - 590) / 90, 0, 1));                                                                  // 세상 끝 : 안개 바다로 흩어짐
+  const sp = ease(clamp(1 - dc / 120, 0, 1)); h = lerp(h, 38 + fbm(x * 0.03, z * 0.03, 2) * 1.0, sp);          // 마을 터
+  const da = dist2(x, z, W.arena.x, W.arena.z), ar = ease(clamp((1 - da / (W.arena.r * 1.45)) * 2.6, 0, 1)); h = lerp(h, 62 + fbm(x * 0.02, z * 0.02, 2) * 1.5, ar);   // 바람골 : 넓고 평평한 구름 대지
+  const dl = dist2(x, z, W.lake.x, W.lake.z), lk = ease(clamp((1 - dl / (W.lake.r * 1.3)) * 3, 0, 1)); h = lerp(h, 30.0 + dl * 0.0143, lk);   // 물기둥이 떨어지는 얕은 못
+  return -16 + (h + 16) * Math.pow(k, 0.42);
 }
 function rawHeight3(x, z) {      // 3지역 : 바다에 둘러싸인 화산섬. 북서쪽에 분화구가 팬 큰 화산
   const dc = Math.hypot(x, z), dv = dist2(x, z, W.arena.x, W.arena.z);
@@ -226,28 +230,29 @@ function water() {
 }
 
 /* ───── 식생 · 바위 : 인스턴싱 ───── */
-function fixMat(m, glow, leafOnly, gk) {
+export function fixMat(m, glow, leafOnly, gk) {
   m = m.clone(); if (m.map) m.map.anisotropy = 4;
   if (m.transparent || m.alphaTest > 0 || (m.map && m.name && /leav|leaf|flower|petal|grass|fern|plant/i.test(m.name))) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; }
   if (glow && (!leafOnly || m.alphaTest > 0)) { m.emissive = new THREE.Color(glow); m.emissiveMap = m.map; m.emissiveIntensity = 0.0; m.userData.gk = gk || 1; W.glowMats.push(m); }
   m.envMapIntensity = 0.5; return m;
 }
-function scatter(key, list, opt = {}) {      // list : [{x,y,z,s,ry}]
+const CT = new THREE.Color();
+export function scatter(key, list, opt = {}) {      // list : [{x,y,z,s,ry}]
   const ps = parts(key); if (!ps.length || !list.length) return;
   const CH = 8, cs = W.size / CH, buckets = new Map();
   for (const it of list) { const k = Math.floor((it.x + W.half) / cs) + '_' + Math.floor((it.z + W.half) / cs); (buckets.get(k) || buckets.set(k, []).get(k)).push(it); }
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Euler();
   for (const p of ps) {
-    const mat = fixMat(p.mat, opt.glow, opt.leafOnly, opt.gk); if (opt.bright) mat.color.multiplyScalar(opt.bright);
+    const mat = fixMat(p.mat, opt.glow, opt.leafOnly, opt.gk); if (opt.bright) mat.color.multiplyScalar(opt.bright); if (opt.mat) opt.mat(mat);
     for (const arr of buckets.values()) {
       const im = new THREE.InstancedMesh(p.geo, mat, arr.length);
-      arr.forEach((it, i) => { E.set(it.rx || 0, it.ry || 0, it.rz || 0); Q.setFromEuler(E); S.setScalar(it.s); T.set(it.x, it.y, it.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i, M); });
+      arr.forEach((it, i) => { if (it.c !== undefined) im.setColorAt(i, CT.setHex(it.c)); E.set(it.rx || 0, it.ry || 0, it.rz || 0); Q.setFromEuler(E); S.setScalar(it.s); T.set(it.x, it.y, it.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i, M); });
       im.castShadow = !!opt.shadow; im.receiveShadow = true; im.userData.key = key; im.computeBoundingSphere(); G.scene.add(im); W.veg.push({ im, x: im.boundingSphere.center.x, z: im.boundingSphere.center.z, r: im.boundingSphere.radius, max: opt.max || 700 });
     }
   }
 }
-function place(r, n, rule) { const out = []; let guard = 0; while (out.length < n && guard++ < n * 30) { const x = (r() * 2 - 1) * (W.limit - 10), z = (r() * 2 - 1) * (W.limit - 10); const it = rule(x, z); if (it) out.push(Object.assign({ x, z, y: hAt(x, z), ry: r() * 6.283 }, it)); } return out; }
-const openGround = (x, z, margin = 0) => hAt(x, z) > W.water + 0.8 && slopeAt(x, z) < 0.5 && dist2(x, z, W.arena.x, W.arena.z) > W.arena.r * 0.95 + margin && Math.hypot(x, z) < W.limit - 20;
+export function place(r, n, rule) { const out = []; let guard = 0; while (out.length < n && guard++ < n * 30) { const x = (r() * 2 - 1) * (W.limit - 10), z = (r() * 2 - 1) * (W.limit - 10); const it = rule(x, z); if (it) out.push(Object.assign({ x, z, y: hAt(x, z), ry: r() * 6.283 }, it)); } return out; }
+export const openGround = (x, z, margin = 0) => hAt(x, z) > W.water + 0.8 && slopeAt(x, z) < 0.5 && dist2(x, z, W.arena.x, W.arena.z) > W.arena.r * 0.95 + margin && Math.hypot(x, z) < W.limit - 20;
 const forest = (x, z) => fbm(x * 0.011 + 40, z * 0.011 + 40, 3);
 
 function vegetation() {
@@ -330,7 +335,7 @@ function islands() {
     const a = r() * 6.28, px = x + Math.cos(a) * (rad + 14), pz = z + Math.sin(a) * (rad + 14); addPad(px, pz, Math.sqrt(2 * 34 * (up + 9)), [x - px, z - pz]);
   }
 }
-function addPad(x, z, power, toward) {
+export function addPad(x, z, power, toward) {
   const y = hAt(x, z), f = clone('flower_gazania'); f.scale.setScalar(9); f.position.set(x, y, z);
   f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0x35ffd0); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.6; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } });
   if (W.pads.length < 4) { const l = new THREE.PointLight(0x35ffd0, 22, 26, 1.6); l.position.set(0, 0.35, 0); f.add(l); } G.scene.add(f);
@@ -357,7 +362,7 @@ function resources() {
       f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xff3b6b); o.material.emissiveIntensity = 0.9; } }); obj.add(f); node.fruits.push(f); }
   });
   add('wood', 'tree_stump_01', 30, 1.6, 2.4); add('wood', 'dead_tree_trunk_02', 26, 1.3, 2.0);
-  add('stone', 'namaqualand_boulder_02', 44, 1.0, 1.5);
+  add('stone', R2 ? 'coral_brain' : 'namaqualand_boulder_02', 44, 1.0, 1.5);
   add('dust', 'flower_gazania', 50, 3.0, 4.2, null, (node, obj) => { obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xffc44a); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.5; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } }); });
 }
 
@@ -490,6 +495,7 @@ function lights() {
 const cNightFog = new THREE.Color(0x0c2c3c), cDuskFog = new THREE.Color(0xd79a9a), cNightSun = new THREE.Color(0xa9c6ff), cDuskSun = new THREE.Color(0xffc9a0), tmp = new THREE.Color();
 export function updateWorld(dt, focus) {
   W.uniforms.uTime.value += dt; if (focus) W.uniforms.uP.value.copy(focus);
+  if (R2) { update2(dt, focus, sun, hemi); if (focus && (G.frame % 20) === 0) for (const v of W.veg) v.im.visible = Math.hypot(v.x - focus.x, v.z - focus.z) < v.max + v.r; return; }
   const cyc = (W.uniforms.uTime.value / 420 + 0.35) % 1, night = R3 ? clamp(0.82 + 0.16 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.6, 0.97) : R2 ? clamp(0.5 + 0.34 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.2, 0.86) : clamp(0.9 + 0.16 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.72, 1);    // 대부분 밤, 가끔 황혼
   W.uniforms.uNight.value = night;
   G.scene.fog.color.copy(tmp.copy(cDuskFog).lerp(cNightFog, night)); sun.color.copy(tmp.copy(cDuskSun).lerp(cNightSun, night)); sun.intensity = lerp(3.4, 1.5, night);
@@ -500,5 +506,6 @@ export function updateWorld(dt, focus) {
 }
 
 export function buildWorld() {
+  if (R2) { buildHeight(); lights(); W.glowMats = []; W.veg = []; water(); build2(); resources(); buildGrid(); return; }
   buildHeight(); lights(); sky(); terrain(); water(); islands(); falls(); vegetation(); giants(); resources(); grass(); motes(); buildGrid();
 }
