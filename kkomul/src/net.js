@@ -7,8 +7,8 @@ export class Net {
   constructor() { this.host = false; this.peer = null; this.conns = new Map(); this.up = null; this.id = null; this.code = null; this.sendT = 0; this.bossT = 0; }
   static code() { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 5; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
   open(id) { return new Promise((res, rej) => { const p = new Peer(id, { debug: 1 }); const t = setTimeout(() => rej(new Error('연결 서버 응답 없음')), 25000); p.on('open', i => { clearTimeout(t); res(p); }); p.on('error', e => { clearTimeout(t); rej(e); }); }); }
-  async create() {
-    this.code = Net.code(); this.peer = await this.open(PRE + this.code); this.host = true; this.id = 'host';
+  async create(keep) {
+    this.code = keep || Net.code(); this.peer = await this.open(PRE + this.code); this.host = true; this.id = 'host';
     this.peer.on('connection', c => {
       c.on('open', () => { if (this.conns.size >= MAXP - 1) { c.send({ t: 'full' }); setTimeout(() => c.close(), 300); return; } });
       c.on('data', m => this.onHost(c, m)); c.on('close', () => this.drop(c)); c.on('error', () => this.drop(c));
@@ -30,7 +30,7 @@ export class Net {
     if (m.t === 'hello') {
       c._pid = m.id; this.conns.set(m.id, c); this.addRemote(m.id, m.kind, m.name); emit('toast', m.name + ' 들어옴');
       const players = [{ id: 'host', kind: G.me.kind, name: G.me.name }]; for (const [id, r] of G.others) if (id !== m.id) players.push({ id, kind: r.ch.kind, name: r.ch.tagName });
-      c.send({ t: 'welcome', players, time: G.time, wt: G.worldTime(), builds: G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })), gone: G.goneNodes(), bossHp: G.boss.hp, bossAlive: G.boss.alive });
+      c.send({ t: 'welcome', region: G.region, players, time: G.time, wt: G.worldTime(), builds: G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })), gone: G.goneNodes(), bossHp: G.boss.hp, bossAlive: G.boss.alive });
       this.cast({ t: 'join', id: m.id, kind: m.kind, name: m.name }, m.id); return;
     }
     if (m.t === 'p') { const r = G.others.get(m.id); if (r) r.set(m); this.cast(m, m.id); return; }
@@ -39,6 +39,8 @@ export class Net {
   }
   onClient(m) {
     if (m.t === 'full') { emit('toast', '방이 가득 참 (최대 10명)'); return; }
+    if (m.t === 'travel') { emit('travel', m); return; }
+    if (m.t === 'welcome' && m.region && m.region !== G.region) { emit('travel', { r: m.region }); return; }
     if (m.t === 'welcome') { m.players.forEach(p => this.addRemote(p.id, p.kind, p.name)); m.builds.forEach(b => placeBuild(b, false)); m.gone.forEach(id => nodeRemote(id)); G.setWorldTime(m.wt); if (!m.bossAlive) { G.boss.alive = false; G.boss.deadT = 99; G.boss.group.visible = false; } emit('toast', '방에 들어옴 · ' + (m.players.length + 1) + '명'); return; }
     if (m.t === 'join') { this.addRemote(m.id, m.kind, m.name); emit('toast', m.name + ' 들어옴'); return; }
     if (m.t === 'leave') { const r = G.others.get(m.id); if (r) { r.ch.dispose(); G.others.delete(m.id); emit('roster'); } return; }

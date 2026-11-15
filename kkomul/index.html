@@ -71,12 +71,13 @@ body.mobile #prompt{bottom:190px}
 <canvas id="c"></canvas>
 
 <div id="start"><div class="box sheet">
-  <h1>꼬물족 이야기<small>제1장 · 별꽃 분지</small></h1>
-  <p class="lore">밤마다 풀과 꽃이 빛나는 꿈결 같은 분지. 손바닥만 한 꼬물족은 열매를 따고 밭을 일구며 살았으나, 분화구에 둥지를 튼 거대한 「아귀룡」이 모두를 삼키려 든다. 작고 하찮은 우리가, 이 넓은 세상에서 살아남을 수 있을까?</p>
+  <h1>꼬물족 이야기<small id="chap">제1장 · 별꽃 분지</small></h1>
+  <p class="lore" id="lore">밤마다 풀과 꽃이 빛나는 꿈결 같은 분지. 손바닥만 한 꼬물족은 열매를 따고 밭을 일구며 살았으나, 분화구에 둥지를 튼 거대한 「아귀룡」이 모두를 삼키려 든다. 작고 하찮은 우리가, 이 넓은 세상에서 살아남을 수 있을까?</p>
   <div class="lab">이름</div><input id="name" maxlength="8" placeholder="이름 (8자까지)">
   <div class="lab">꼬물족 고르기</div><div id="chars"></div>
   <div class="row"><button class="btn" id="solo" disabled>혼자 시작</button><button class="btn teal" id="host" disabled>방 만들기 (친구와 같이)</button></div>
   <div class="row"><input id="code" maxlength="5" placeholder="방 코드"><button class="btn alt" id="join" disabled>코드로 들어가기</button></div>
+  <div class="row" id="regRow" style="display:none"><button class="btn alt" id="regBtn"></button></div>
   <div id="load"><i></i></div><div id="loadTxt">세상을 불러오는 중…</div><div id="err"></div>
 </div></div>
 
@@ -99,6 +100,6 @@ body.mobile #prompt{bottom:190px}
 
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
-<script type="module" src="src/main.js?v=5"></script>
+<script type="module" src="src/main.js?v=6"></script>
 </body>
 </html>

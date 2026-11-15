@@ -6,6 +6,8 @@ export const G = {
   input: null, net: null, ui: null, paused: true, started: false, quality: 1, mobile: /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent),
   inv: { fruit: 0, wood: 0, stone: 0, dust: 0, seed: 0 }, weaponLv: 0, quest: 0, questProg: 0, builds: [], home: null, testMode: new URLSearchParams(location.search).has('test'),
 };
+// 지역 : 1 별꽃 분지 · 2 구름고래 고원 (주소의 ?map= 이 우선, 다음은 저장된 값)
+{ let r = new URLSearchParams(location.search).get('map'); if (!r) try { r = localStorage.getItem('mochi_region'); } catch (e) { } G.region = +r === 2 ? 2 : 1; }
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const damp = (a, b, k, dt) => lerp(a, b, 1 - Math.exp(-k * dt));

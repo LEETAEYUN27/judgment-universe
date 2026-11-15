@@ -1,19 +1,32 @@
-// 1지역 「별꽃 분지」 : 지형 · 하늘 · 물 · 식생 · 떠 있는 섬 · 자원
+// 지역(1 별꽃 분지 · 2 구름고래 고원) : 지형 · 하늘 · 물 · 식생 · 떠 있는 섬 · 자원
 import { THREE, G, clamp, lerp, rng, dist2, ease } from './g.js';
 import { parts, clone, bounds } from './assets.js';
 
 export const W = {
   size: 1500, res: 300, half: 750, limit: 690, water: 0,
-  spawn: { x: 0, z: 0 }, lake: { x: 250, z: 240, r: 125 }, arena: { x: -360, z: -330, r: 105 },
+  spawn: { x: 0, z: 0 }, lake: { x: 250, z: 240, r: 125 }, arena: { x: -360, z: -330, r: 105 }, name: '별꽃 분지',
   islands: [], pads: [], colliders: [], nodes: [], grid: null, cell: 0, hmap: null, uniforms: { uTime: { value: 0 }, uNight: { value: 1 }, uSteps: { value: Array.from({ length: 16 }, () => new THREE.Vector3(0, 0, -99)) }, uP: { value: new THREE.Vector3() } }, stepI: 0,
 };
 
+const R2 = G.region === 2; if (R2) Object.assign(W, { lake: { x: -230, z: 270, r: 70 }, arena: { x: 340, z: -330, r: 120 }, name: '구름고래 고원' });
 /* ───── 높이 함수 ───── */
 const P = new Uint8Array(512); { const r = rng(20261115); for (let i = 0; i < 256; i++) P[i] = i; for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [P[i], P[j]] = [P[j], P[i]]; } for (let i = 0; i < 256; i++) P[256 + i] = P[i]; }
 const hash = (x, y) => P[(P[x & 255] + y) & 255] / 255;
 function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), u), lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), u), v); }
 export function fbm(x, y, o = 5) { let a = 0.5, f = 1, s = 0; for (let i = 0; i < o; i++) { s += a * vnoise(x * f, y * f); a *= 0.5; f *= 2.03; } return s; }
+function rawHeight2(x, z) {      // 2지역 : 계단처럼 층진 고원 + 구름 바다가 흐르는 깊은 골짜기
+  let h = 24 + fbm(x * 0.0036 + 31, z * 0.0036 + 17, 5) * 78;
+  const st = 15, q = h / st, fl = Math.floor(q); h = (fl + ease(clamp((q - fl - 0.3) / 0.4, 0, 1))) * st * 0.8 + h * 0.2;                 // 층진 단구
+  h += fbm(x * 0.02 + 3, z * 0.02 + 8, 3) * 3;
+  const rd = Math.abs(fbm(x * 0.0021 + 70, z * 0.0021 + 90, 4) - 0.5) * 2, cut = ease(clamp(1 - rd / 0.075, 0, 1)); h = lerp(h, -13 + rd * 60, cut);   // 골짜기
+  const dc = Math.hypot(x, z), sp = ease(clamp(1 - dc / 125, 0, 1)); h = lerp(h, 38 + fbm(x * 0.03, z * 0.03, 2) * 1.2, sp);          // 마을 터
+  const dl = dist2(x, z, W.lake.x, W.lake.z), lk = ease(clamp(1 - dl / (W.lake.r * 1.5), 0, 1)); h = lerp(h, -8 + dl * 0.08, lk);     // 구름 샘
+  const da = dist2(x, z, W.arena.x, W.arena.z), ar = ease(clamp((1 - da / (W.arena.r * 1.45)) * 2.6, 0, 1)); h = lerp(h, 74 + fbm(x * 0.02, z * 0.02, 2) * 2.5, ar);   // 바람골 : 높고 평평한 대지
+  const edge = clamp((dc - 620) / 130, 0, 1); h += edge * edge * (110 + fbm(x * 0.012 + 5, z * 0.012 + 5, 3) * 80);
+  return h;
+}
 function rawHeight(x, z) {
+  if (R2) return rawHeight2(x, z);
   let h = fbm(x * 0.0042 + 11, z * 0.0042 + 7, 5) * 62 - 20;                          // 완만한 구릉
   h += Math.pow(fbm(x * 0.0015 + 3, z * 0.0015 + 9, 3), 2.2) * 95;                    // 큰 능선
   const dc = Math.hypot(x, z);
@@ -55,7 +68,7 @@ function hfOf(key, N = 28) {
   return HF[key] = { N, x0, z0, dx, dz, h, y0: bb.min.y, y1: bb.max.y, R: Math.hypot(Math.max(-bb.min.x, bb.max.x), Math.max(-bb.min.z, bb.max.z)) };
 }
 // 물체 하나를 단단하게 등록 (it : {x,y,z,s,ry})
-export function solid(key, it, extra) { const f = hfOf(key, key === 'rock_moss_set_01' || key === 'rock_face_02' ? 48 : 28); const c = Object.assign({ hf: f, x: it.x, z: it.z, y: it.y, s: it.s, cos: Math.cos(it.ry || 0), sin: Math.sin(it.ry || 0), r: f.R * it.s, sy: it.sy || 1 }, extra); if (W.grid) addCollider(c); else W.colliders.push(c); return c; }
+export function solid(key, it, extra) { const f = hfOf(key, key === 'coastal_cliff_01' ? 72 : key === 'rock_moss_set_01' || key === 'rock_face_02' ? 48 : 28); const c = Object.assign({ hf: f, x: it.x, z: it.z, y: it.y, s: it.s, cos: Math.cos(it.ry || 0), sin: Math.sin(it.ry || 0), r: f.R * it.s, sy: it.sy || 1 }, extra); if (W.grid) addCollider(c); else W.colliders.push(c); return c; }
 function hfTop(c, x, z) {
   const ax = (x - c.x) / c.s, az = (z - c.z) / c.s, lx = ax * c.cos - az * c.sin, lz = ax * c.sin + az * c.cos, f = c.hf, N = f.N;
   let u = (lx - f.x0) / f.dx - 0.5, v = (lz - f.z0) / f.dz - 0.5; if (u < -0.5 || v < -0.5 || u > N - 0.5 || v > N - 0.5) return -1e9;
@@ -177,8 +190,14 @@ function water() {
         c += vec3(0.25, 1.0, 0.85) * smoothstep(0.72, 0.9, w) * (0.35 + 0.65 * uNight);      // 물빛 반짝임
         c = mix(c, mix(vec3(0.95, 0.8, 0.85), vec3(0.25, 0.3, 0.65), uNight), fr * 0.7);
         gl_FragColor = vec4(c, mix(0.78, 0.92, fr));
+        #ifdef CLOUD
+        float cl = n(q * 0.35 + uTime * 0.03) * 0.55 + n(q * 0.9 - uTime * 0.05) * 0.3 + n(q * 2.6 + uTime * 0.08) * 0.15;
+        vec3 cc = mix(mix(vec3(0.95, 0.72, 0.78), vec3(0.30, 0.34, 0.62), uNight), mix(vec3(1.0, 0.95, 0.92), vec3(0.70, 0.78, 1.0), uNight), smoothstep(0.3, 0.75, cl));
+        gl_FragColor = vec4(cc, 0.93 + 0.07 * cl);
+        #endif
       }`,
   });
+  if (R2) { mat.defines = { CLOUD: 1 }; mat.transparent = false; const m = new THREE.Mesh(new THREE.CircleGeometry(W.half * 1.5, 48), mat); m.rotation.x = -Math.PI / 2; m.position.set(0, W.water, 0); m.name = 'water'; G.scene.add(m); return; }
   const m = new THREE.Mesh(new THREE.CircleGeometry(W.lake.r * 1.6, 64), mat); m.rotation.x = -Math.PI / 2; m.position.set(W.lake.x, W.water, W.lake.z); m.name = 'water'; G.scene.add(m);
 }
 
@@ -195,7 +214,7 @@ function scatter(key, list, opt = {}) {      // list : [{x,y,z,s,ry}]
   for (const it of list) { const k = Math.floor((it.x + W.half) / cs) + '_' + Math.floor((it.z + W.half) / cs); (buckets.get(k) || buckets.set(k, []).get(k)).push(it); }
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Euler();
   for (const p of ps) {
-    const mat = fixMat(p.mat, opt.glow, opt.leafOnly, opt.gk);
+    const mat = fixMat(p.mat, opt.glow, opt.leafOnly, opt.gk); if (opt.bright) mat.color.multiplyScalar(opt.bright);
     for (const arr of buckets.values()) {
       const im = new THREE.InstancedMesh(p.geo, mat, arr.length);
       arr.forEach((it, i) => { E.set(it.rx || 0, it.ry || 0, it.rz || 0); Q.setFromEuler(E); S.setScalar(it.s); T.set(it.x, it.y, it.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i, M); });
@@ -208,26 +227,35 @@ const openGround = (x, z, margin = 0) => hAt(x, z) > W.water + 0.8 && slopeAt(x,
 const forest = (x, z) => fbm(x * 0.011 + 40, z * 0.011 + 40, 3);
 
 function vegetation() {
-  const r = rng(77); W.glowMats = []; W.veg = [];
+  const r = rng(R2 ? 177 : 77); W.glowMats = []; W.veg = [];
   const q = G.quality;
   // 큰 나무
-  const big = place(r, Math.round(70 * q), (x, z) => openGround(x, z, 20) && Math.hypot(x, z) > 45 && forest(x, z) > 0.44 ? { s: 3.0 + r() * 4.2 } : null);
+  const big = place(r, Math.round((R2 ? 55 : 70) * q), (x, z) => openGround(x, z, 20) && Math.hypot(x, z) > 45 && forest(x, z) > 0.44 ? { s: 3.0 + r() * 4.2 } : null);
   scatter('island_tree_02', big, { shadow: true, glow: 0x1fae8f, leafOnly: true, gk: 0.5 }); big.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.4 * t.s, big: 1, h: 3 * t.s, can: [t.x + Math.sin(t.ry) * 1.25 * t.s, t.y + 2.35 * t.s, t.z + Math.cos(t.ry) * 1.25 * t.s, 1.55 * t.s] }));
-  const jac = place(r, Math.round(10 * q), (x, z) => openGround(x, z, 30) && Math.hypot(x, z) > 45 && forest(x, z) < 0.52 ? { s: 1.6 + r() * 1.8 } : null);
+  const jac = place(r, Math.round((R2 ? 22 : 10) * q), (x, z) => openGround(x, z, 30) && Math.hypot(x, z) > 45 && forest(x, z) < (R2 ? 0.6 : 0.52) ? { s: 1.6 + r() * 1.8 } : null);
   scatter('jacaranda_tree', jac, { shadow: true, glow: 0xb06cff, leafOnly: true, gk: 0.9 }); jac.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 1.25 * t.s, big: 1, h: 12 * t.s, can: [t.x, t.y + 12.5 * t.s, t.z, 6.6 * t.s] }));
-  const qv = place(r, Math.round(150 * q), (x, z) => openGround(x, z, 10) && Math.hypot(x, z) > 30 ? { s: 1.4 + r() * 2.6 } : null);
+  const qv = place(r, Math.round((R2 ? 60 : 150) * q), (x, z) => openGround(x, z, 10) && Math.hypot(x, z) > 30 ? { s: 1.4 + r() * 2.6 } : null);
   scatter('quiver_tree_02', qv, { shadow: true }); qv.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.2 * t.s, h: 1.3 * t.s }));
   // 바위
   const bo = place(r, Math.round(120 * q), (x, z) => hAt(x, z) > W.water - 1 && Math.hypot(x, z) > 30 && dist2(x, z, W.arena.x, W.arena.z) > 40 ? { s: 1.5 + Math.pow(r(), 3) * 9 } : null); bo.forEach(t => { t.y -= 0.12 * t.s; });
   scatter('namaqualand_boulder_02', bo, { shadow: true, max: 620 });
   bo.forEach(t => { solid('namaqualand_boulder_02', t); if (t.s > 4) W.colliders.push({ x: t.x, z: t.z, r: 0.9 * t.s, big: 1, h: -1 }); });
   const rk = place(r, Math.round(160 * q), (x, z) => hAt(x, z) > W.water - 2 ? { s: 0.8 + r() * 2.2 } : null); scatter('rock_moss_set_01', rk, { max: 260 }); rk.forEach(t => solid('rock_moss_set_01', t));
-  // 바위 기둥 : 몇 곳에 무리 지어 솟음
-  const pil = []; for (let k = 0; k < Math.round(9 * Math.max(0.5, q)); k++) { let cx, cz, gd = 0; do { cx = (r() * 2 - 1) * 560; cz = (r() * 2 - 1) * 560; } while (gd++ < 40 && !(openGround(cx, cz, 60) && Math.hypot(cx, cz) > 110));
+  // 바위 기둥 : 몇 곳에 무리 지어 솟음 (2지역은 돌기둥 숲)
+  const pil = []; for (let k = 0; k < Math.round((R2 ? 17 : 9) * Math.max(0.5, q)); k++) { let cx, cz, gd = 0; do { cx = (r() * 2 - 1) * 560; cz = (r() * 2 - 1) * 560; } while (gd++ < 40 && !(openGround(cx, cz, 60) && Math.hypot(cx, cz) > 110));
     if (gd > 40) continue; const n = 3 + Math.floor(r() * 4); for (let i = 0; i < n; i++) { const a = r() * 6.283, d = i ? 6 + r() * 22 : 0, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; if (hAt(x, z) < W.water + 0.5) continue; const sc = i ? 2.2 + r() * 3.5 : 5 + r() * 4; pil.push({ x, z, y: hAt(x, z) - 0.25 * sc, s: sc, ry: r() * 6.283 }); } }
+  if (R2) { // 바람골 가장자리의 돌기둥 (구름고래가 들이받는 곳) · 달빛 바위 · 절벽 띠 · 덤불
+    for (let k = 0; k < 9; k++) { const a = k / 9 * 6.283 + 0.3, d = W.arena.r * (0.62 + (k % 3) * 0.12), x = W.arena.x + Math.cos(a) * d, z = W.arena.z + Math.sin(a) * d, sc = 3.2 + r() * 2.2; pil.push({ x, z, y: hAt(x, z) - 0.25 * sc, s: sc, ry: r() * 6.283 }); }
+    const mr = place(r, Math.round(90 * q), (x, z) => openGround(x, z, 5) && Math.hypot(x, z) > 35 ? { s: 28 + Math.pow(r(), 2) * 70 } : null); mr.forEach(t => { t.y -= 0.004 * t.s; });
+    scatter('moon_rock_03', mr, { shadow: true, max: 520, glow: 0x7a8cff, gk: 0.25 }); mr.forEach(t => solid('moon_rock_03', t));
+    const cw = place(r, Math.round(16 * Math.max(0.6, q)), (x, z) => hAt(x, z) > W.water + 6 && Math.hypot(x, z) > 150 && Math.hypot(x, z) < 600 && dist2(x, z, W.arena.x, W.arena.z) > W.arena.r * 1.6 ? { s: 0.5 + r() * 0.5 } : null); cw.forEach(t => { t.y -= 1.2 * t.s; });
+    scatter('coastal_cliff_01', cw, { shadow: true, max: 1100 }); cw.forEach(t => solid('coastal_cliff_01', t));
+    scatter('searsia_burchellii', place(r, Math.round(130 * q), (x, z) => openGround(x, z, 5) && Math.hypot(x, z) > 30 && forest(x, z) > 0.4 ? { s: 0.8 + r() * 1.1 } : null), { shadow: true, max: 380, glow: 0xff8a5a, leafOnly: true, gk: 0.35, bright: 2.6 });
+  }
   scatter('rock_face_02', pil, { shadow: true, max: 900 }); pil.forEach(t => { solid('rock_face_02', t); W.colliders.push({ x: t.x, z: t.z, r: 1.0 * t.s, big: 1, h: -1 }); }); W.pillars = pil;
   // 풀 · 꽃 (밤에 빛남)
   const low = (key, n, s0, s1, glow, f) => scatter(key, place(r, Math.round(n * q), (x, z) => openGround(x, z) && (!f || f(x, z)) ? { s: s0 + r() * (s1 - s0) } : null), { glow, max: 170 });
+  if (!R2) {
   low('fern_02', 2600, 1.2, 2.8, 0x1ad6a0, (x, z) => forest(x, z) > 0.44);
   low('shrub_sorrel_01', 700, 1.5, 3.2, null);
   low('fern_02', 1400, 1.0, 2.2, 0xff4f9a, (x, z) => forest(x, z) > 0.4);
@@ -235,12 +263,20 @@ function vegetation() {
   low('shrub_sorrel_01', 500, 1.2, 2.4, 0x8a7bff);
   low('flower_empodium', 1800, 1.4, 3.0, 0xffd34a, (x, z) => forest(x, z) < 0.55);
   low('dandelion_01', 1500, 1.6, 3.4, 0xfff2a8, (x, z) => forest(x, z) < 0.55);
+  } else {
+    low('fern_02', 1500, 1.2, 2.6, 0xffb14a, (x, z) => forest(x, z) > 0.44);
+    low('shrub_sorrel_01', 1100, 1.6, 3.4, 0xff6fb0);
+    low('flower_ursinia', 2400, 1.5, 3.2, 0xff9a3a, (x, z) => forest(x, z) < 0.56);
+    low('flower_heliophila', 800, 1.6, 3.2, 0x9fd0ff);
+    low('celandine_01', 1700, 1.5, 3.0, 0xffe45a, (x, z) => forest(x, z) > 0.42);
+    low('dandelion_01', 900, 1.6, 3.4, 0xfff2a8, (x, z) => forest(x, z) < 0.55);
+  }
   low('shrub_04', 380, 1.2, 2.4, null);
 }
 
 /* ───── 떠 있는 섬 · 바람꽃(도약대) ───── */
 function islands() {
-  const defs = [[95, -150, 46, 26], [-190, 120, 58, 34], [330, -260, 74, 40], [-470, -40, 90, 46], [120, 430, 64, 36]];   // x, z, 윗면 높이(지면 기준), 반지름
+  const defs = R2 ? [[70, 110, 30, 24], [150, 190, 46, 28], [250, 240, 64, 30], [-150, -170, 40, 30], [-300, -300, 66, 38], [420, 120, 58, 34], [-430, 110, 80, 44], [60, -400, 54, 32], [300, -120, 40, 26]] : [[95, -150, 46, 26], [-190, 120, 58, 34], [330, -260, 74, 40], [-470, -40, 90, 46], [120, 430, 64, 36]];   // x, z, 윗면 높이(지면 기준), 반지름
   const cliff = parts('namaqualand_cliff_02'), cb = bounds('namaqualand_cliff_02'), top = parts('namaqualand_boulder_02'), tb = bounds('namaqualand_boulder_02'), r = rng(5);
   for (const [x, z, up, rad] of defs) {
     const y = hAt(x, z) + up, isl = { x, z, y, r: rad * 0.86 }; W.islands.push(isl);
@@ -263,13 +299,13 @@ function islands() {
 function addPad(x, z, power, toward) {
   const y = hAt(x, z), f = clone('flower_gazania'); f.scale.setScalar(9); f.position.set(x, y, z);
   f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0x35ffd0); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.6; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } });
-  const l = new THREE.PointLight(0x35ffd0, 22, 26, 1.6); l.position.set(0, 0.35, 0); f.add(l); G.scene.add(f);
+  if (W.pads.length < 4) { const l = new THREE.PointLight(0x35ffd0, 22, 26, 1.6); l.position.set(0, 0.35, 0); f.add(l); } G.scene.add(f);
   const d = Math.hypot(toward[0], toward[1]) || 1; W.pads.push({ x, z, y, r: 2.6, power, dir: [toward[0] / d, toward[1] / d], dist: d, obj: f });
 }
 
 /* ───── 자원 : 열매 덤불 · 그루터기(나무) · 돌 · 빛꽃(빛가루) ───── */
 function resources() {
-  const r = rng(303); let id = 0;
+  const r = rng(R2 ? 1303 : 303); let id = 0;
   const add = (type, key, n, s0, s1, rule, deco) => {
     const near = Math.round(n * 0.35);
     for (let i = 0, guard = 0; i < n && guard < n * 60; guard++) {
@@ -287,7 +323,7 @@ function resources() {
       f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xff3b6b); o.material.emissiveIntensity = 0.9; } }); obj.add(f); node.fruits.push(f); }
   });
   add('wood', 'tree_stump_01', 30, 1.6, 2.4); add('wood', 'dead_tree_trunk_02', 26, 1.3, 2.0);
-  add('stone', 'boulder_01', 44, 1.1, 1.6);
+  add('stone', 'namaqualand_boulder_02', 44, 1.0, 1.5);
   add('dust', 'flower_gazania', 50, 3.0, 4.2, null, (node, obj) => { obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xffc44a); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.5; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } }); });
 }
 
@@ -358,7 +394,7 @@ export function stepGlow(x, z) { const a = W.uniforms.uSteps.value[W.stepI = (W.
 
 /* ───── 거대한 나무와 빛나는 덩굴 · 먼 하늘의 떠 있는 바위 ───── */
 function giants() {
-  const r = rng(808), spots = [[-58, -74, 13], [150, 60, 11], [-170, 170, 15], [40, -330, 12], [-250, -120, 14], [360, 330, 12], [-420, 250, 13]], b = bounds('island_tree_02'), pos = [], seed = [];
+  const r = rng(808), spots = R2 ? [[-70, 60, 14], [170, -60, 12], [-200, -220, 15], [120, 330, 13], [-380, 300, 14], [470, -100, 12]] : [[-58, -74, 13], [150, 60, 11], [-170, 170, 15], [40, -330, 12], [-250, -120, 14], [360, 330, 12], [-420, 250, 13]], b = bounds('island_tree_02'), pos = [], seed = [];
   const list = spots.filter(([x, z]) => hAt(x, z) > W.water + 1).map(([x, z, s]) => ({ x, z, y: hAt(x, z) - 0.5, s, ry: r() * 6.28 }));
   scatter('island_tree_02', list, { shadow: true, glow: 0x35e0c0, leafOnly: true, gk: 0.9, max: 1400 });
   for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 0.42 * t.s, big: 1, h: 60, can: [t.x + Math.sin(t.ry) * 1.25 * t.s, t.y + 2.35 * t.s, t.z + Math.cos(t.ry) * 1.25 * t.s, 1.55 * t.s] });
@@ -420,7 +456,7 @@ function lights() {
 const cNightFog = new THREE.Color(0x0c2c3c), cDuskFog = new THREE.Color(0xd79a9a), cNightSun = new THREE.Color(0xa9c6ff), cDuskSun = new THREE.Color(0xffc9a0), tmp = new THREE.Color();
 export function updateWorld(dt, focus) {
   W.uniforms.uTime.value += dt; if (focus) W.uniforms.uP.value.copy(focus);
-  const cyc = (W.uniforms.uTime.value / 420 + 0.35) % 1, night = clamp(0.9 + 0.16 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.72, 1);    // 대부분 밤, 가끔 황혼
+  const cyc = (W.uniforms.uTime.value / 420 + 0.35) % 1, night = R2 ? clamp(0.5 + 0.34 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.2, 0.86) : clamp(0.9 + 0.16 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.72, 1);    // 대부분 밤, 가끔 황혼
   W.uniforms.uNight.value = night;
   G.scene.fog.color.copy(tmp.copy(cDuskFog).lerp(cNightFog, night)); sun.color.copy(tmp.copy(cDuskSun).lerp(cNightSun, night)); sun.intensity = lerp(3.4, 1.5, night);
   hemi.intensity = lerp(2.2, 0.8, night); hemi.color.setHex(0x7fa0ff);

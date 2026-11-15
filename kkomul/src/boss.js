@@ -13,19 +13,19 @@ export class Wyrm {
   constructor(o) {
     Object.assign(this, { id: 'boss', scale: 1, segs: 20, maxHp: 2600, home: W.arena, boss: true, name: '아귀룡' }, o);
     const S = this.scale; this.hp = this.maxHp; this.alive = true; this.spacing = 2.75 * S; this.rad = 1.9 * S;
-    const src = G.assets.agwi; this.group = new THREE.Group(); G.scene.add(this.group);
+    const src = G.assets[this.model || 'agwi']; this.group = new THREE.Group(); G.scene.add(this.group);
     const mk = name => { const n = pick(src, name).clone(true); n.position.set(0, 0, 0); n.scale.setScalar(S); n.traverse(m => { if (m.isMesh) { m.castShadow = true; m.material = m.material.clone(); m.material.envMapIntensity = 0.4; } }); this.group.add(n); return n; };
     this.headN = mk('head'); this.jawN = pick(this.headN, 'jaw'); this.segN = []; this.legs = []; this.mats = [];
     for (let i = 0; i < this.segs; i++) { const s = mk('seg'); const k = i < this.segs - 4 ? 1 - Math.abs(i - this.segs * 0.35) / this.segs * 0.55 : lerp(0.8, 0.35, (i - (this.segs - 4)) / 4); s.scale.setScalar(S * k); s.userData.k = k; this.segN.push(s); }
     this.tailN = mk('tail'); this.tailN.scale.setScalar(S * 0.5);
-    for (let i = 1; i < this.segs - 4; i += 2) for (const side of [1, -1]) { const u = mk('legU'), l = mk('legL'); this.legs.push({ seg: i, side, u, l, foot: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1, init: false }); }
+    if (!this.fly) for (let i = 1; i < this.segs - 4; i += 2) for (const side of [1, -1]) { const u = mk('legU'), l = mk('legL'); this.legs.push({ seg: i, side, u, l, foot: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1, init: false }); }
     this.group.traverse(m => { if (m.isMesh) this.mats.push(m.material); });
     this.eyeMats = this.mats.filter(m => m.name === 'eye'); this.glowMats = this.mats.filter(m => m.name === 'glow');
     // 위치 : 머리 + 마디들. 자취(trail)를 따라 배치
     this.head = new THREE.Vector3(this.home.x, 0, this.home.z); this.yaw = 0; this.pts = []; for (let i = 0; i <= this.segs + 1; i++) this.pts.push(new THREE.Vector3());
     this.trail = []; this.coil();
     this.st = 'sleep'; this.t = 0; this.cd = { bite: 0, charge: 2, sweep: 3, burrow: 9 }; this.target = null; this.speed = 0; this.rear = 0; this.jaw = 0; this.dig = 0; this.glow = 0; this.flash = new Float32Array(this.segs + 2); this.ring = null; this.hazard = { bite: false, contact: false, erupt: null }; this.phase = 1; this.stunT = 0; this.wob = 0; this.deadT = 0;
-    this.netT = 0; this.net = null;
+    this.netT = 0; this.net = null; this.alts = new Float32Array(this.segs + 2);
     this.place(0.016);
   }
   coil() {       // 둥지에서 똬리를 튼 모습
@@ -60,35 +60,39 @@ export class Wyrm {
         const d = n.d;
         if (d < (this.boss ? 17 : 5) * 1 && off < 0.6 && c.bite <= 0) { this.go('biteTell'); c.bite = this.boss ? 2.4 / fast : 1.8; }
         else if (this.boss && d > 20 && d < 75 && off < 0.4 && c.charge <= 0) { this.go('chargeTell'); c.charge = 7.5 / fast; }
-        else if (this.boss && c.sweep <= 0 && this.playersNearBody(11)) { this.go('sweepTell'); c.sweep = 6.5 / fast; }
+        else if (this.fly && this.boss && c.sweep <= 0 && d < 44 && off < 0.5) { this.go('inhaleTell'); c.sweep = 11 / fast; }
+        else if (!this.fly && this.boss && c.sweep <= 0 && this.playersNearBody(11)) { this.go('sweepTell'); c.sweep = 6.5 / fast; }
         else if (this.boss && ph >= 2 && c.burrow <= 0 && d > 14) { this.go('dive'); c.burrow = 16 / fast; }
         break;
       }
       case 'return': { const a = Math.atan2(this.home.x - this.head.x, this.home.z - this.head.z); this.yaw = dampAng(this.yaw, a, 3, dt); spd = 9; if (dist2(this.head.x, this.head.z, this.home.x, this.home.z) < 12) this.go('chase'); if (n && n.d < 10) this.go('chase'); break; }
       case 'biteTell': { rear = 0.55; jaw = lerp(0.2, 1, this.t / 0.5); glow = 1; turn = 2.2; spd = -3 * S; if (this.t > (this.boss ? 0.55 : 0.4)) { this.go('bite'); this.lungeYaw = this.yaw; } break; }
       case 'bite': { jaw = lerp(1, 0, clamp((this.t - 0.16) / 0.1, 0, 1)); spd = (this.boss ? 62 : 26); rear = 0.15; this.hazard.bite = this.t > 0.05; if (this.t > 0.26) this.go('recover'); break; }
-      case 'recover': { jaw = 0.1; spd = 0; rear = -0.25; glow = 0.1; if (this.t > (this.boss ? 1.25 / fast : 0.8)) this.go('chase'); break; }
+      case 'recover': { jaw = 0.1; spd = 0; rear = -0.25; glow = 0.1; if (this.t > (this.boss ? (this.fly ? 2.1 : 1.25) / fast : 0.8)) this.go('chase'); break; }
       case 'chargeTell': { rear = ease(clamp(this.t / 0.4, 0, 1)); jaw = 0.75; glow = 1; turn = 3; spd = -2; if (this.t > 0.95 / fast) this.go('charge'); break; }
       case 'charge': {
         turn = 0.55; spd = 36 * fast; jaw = 0.5; rear = 0.1; glow = 0.8; this.hazard.contact = true;
         for (const cl of nearColliders(this.head.x, this.head.z, 6)) if (cl.big && dist2(cl.x, cl.z, this.head.x, this.head.z) < cl.r + 2.6 * S) { this.go('stun'); emit('bossCrash', { x: this.head.x, y: this.head.y, z: this.head.z }); break; }
-        if (this.st === 'charge' && this.t > 2.1) { this.go(ph === 3 ? 'sweepTell' : 'recover'); }
+        if (this.st === 'charge' && this.t > 2.1) { this.go(ph === 3 && !this.fly ? 'sweepTell' : 'recover'); }
         break;
       }
+      case 'inhaleTell': { jaw = lerp(0.2, 1, this.t / 0.7); glow = 1; turn = 2.4; spd = -2; rear = 0.2; if (this.t > 0.8) this.go('inhale'); break; }
+      case 'inhale': { jaw = 1; glow = 1; turn = 0.9; spd = 1.5; this.hazard.bite = this.t > 0.25; if (this.t > 2.7) { this.go('bite'); this.lungeYaw = this.yaw; } break; }
       case 'stun': { jaw = 0.35; rear = -0.4; glow = 0; spd = 0; if (this.t > 3.6) this.go('chase'); break; }
       case 'sweepTell': { spd = 2; turn = 0.5; glow = 1; if (this.t > 0.75) { const tl = this.pts[this.segs]; this.ring = { x: tl.x, z: tl.z, r: 2, max: this.boss ? 46 : 12, y: hAt(tl.x, tl.z) }; emit('bossSweep', this.ring); this.go('sweep'); } break; }
       case 'sweep': { spd = 3; if (this.t > 0.9) this.go('chase'); break; }
       case 'dive': { dig = ease(clamp(this.t / 0.9, 0, 1)); rear = -0.6; spd = 9; turn = 1; if (this.t > 1.0) this.go('burrow'); break; }
       case 'burrow': { dig = 1; spd = 22 * fast; turn = 3.2; glow = 0; if (this.t > 2.4 || (n && n.d < 5 && this.t > 0.8)) { this.erupt = tp ? { x: tp.x, z: tp.z } : { x: this.head.x, z: this.head.z }; this.go('eruptTell'); emit('bossEruptTell', this.erupt); } break; }
-      case 'eruptTell': { dig = 1; spd = 0; if (this.erupt) { this.head.x = damp(this.head.x, this.erupt.x, 9, dt); this.head.z = damp(this.head.z, this.erupt.z, 9, dt); } if (this.t > 0.7) { this.go('erupt'); emit('bossErupt', this.erupt); } break; }
+      case 'eruptTell': { dig = 1; spd = 0; if (this.erupt) { this.head.x = damp(this.head.x, this.erupt.x, 9, dt); this.head.z = damp(this.head.z, this.erupt.z, 9, dt); } if (this.t > (this.fly ? 1.0 : 0.7)) { this.go('erupt'); emit('bossErupt', this.erupt); if (this.fly && this.erupt) this.ring = { x: this.erupt.x, z: this.erupt.z, r: 2, max: 40, y: hAt(this.erupt.x, this.erupt.z) }; } break; }
       case 'erupt': { const k = clamp(this.t / 0.35, 0, 1); dig = 1 - k; rear = 1.6 * Math.sin(k * Math.PI * 0.5) * (1 - clamp((this.t - 0.8) / 0.6, 0, 1)); jaw = 1; glow = 1; spd = 4; if (this.t < 0.35) this.hazard.erupt = this.erupt; if (this.t > 1.5) this.go('recover'); break; }
     }
+    if (this.fly) dig = 0;
     if (turn > 0 && tp) { const dy = angDiff(this.yaw, aim), st = turn * dt; this.yaw += clamp(dy, -st, st); }
     this.speed = damp(this.speed, spd, this.st === 'bite' || this.st === 'charge' ? 30 : 5, dt);
     const hx0 = this.head.x, hz0 = this.head.z;
     this.head.x += Math.sin(this.yaw) * this.speed * dt; this.head.z += Math.cos(this.yaw) * this.speed * dt;
     // 바위 · 나무 : 못 넘는 것은 비켜서 돌아감 (돌진 · 잠행 중에는 예외)
-    if (this.alive && this.st !== 'charge' && this.st !== 'burrow' && this.st !== 'dive' && this.st !== 'erupt' && this.st !== 'eruptTell') {
+    if (this.alive && !(this.fly && this.alts[0] > 5 * this.scale) && this.st !== 'charge' && this.st !== 'burrow' && this.st !== 'dive' && this.st !== 'erupt' && this.st !== 'eruptTell') {
       const hr = this.rad * 0.9, cap = this.boss ? 7 : 0.9, mv = Math.max(Math.abs(this.speed), 3) * dt;
       const bad = (x, z) => { if (solidTop(x, z) > hAt(x, z) + cap) return true; for (const c of nearColliders(x, z, 8)) { if (c.hf || c.h < 0 || c.node) continue; if (Math.hypot(x - c.x, z - c.z) < c.r + hr) return true; } return false; };
       if (bad(this.head.x, this.head.z)) { this.side = this.side || (Math.random() < 0.5 ? 1 : -1); let ok = false;
@@ -109,6 +113,8 @@ export class Wyrm {
     const S = this.scale, n = this.segs, wave = G.time * 3.2;
     if (!this.alive) { this.deadT += dt; }
     const sink = this.alive ? 0 : Math.min(1, this.deadT / 2.5);
+    if (this.fly) { const A = { sleep: 0, roar: 9, chase: 15, 'return': 12, biteTell: 4, bite: 0, recover: 0, chargeTell: 5, charge: 0.4, stun: 0, inhaleTell: 3, inhale: 1.5, dive: 20, burrow: 26, eruptTell: 26, erupt: 0, dead: 0 }, al = this.alts, want = (A[this.st] || 0) * Math.max(S, 0.35) * (this.alive ? 1 : 0), k = this.st === 'erupt' || this.st === 'bite' || this.st === 'charge' ? 9 : 2.6;
+      al[0] = damp(al[0], want, k, dt); for (let i = 1; i < al.length; i++) al[i] = damp(al[i], al[i - 1], this.st === 'erupt' ? 14 : 7, dt); }
     for (let i = 0; i <= n + 1; i++) {
       const p = this.pts[i]; let x, z;
       if (i === 0) { x = this.head.x; z = this.head.z; } else { const a = this.along(i * this.spacing + 1.2 * S); x = a[0]; z = a[1]; }
@@ -116,6 +122,7 @@ export class Wyrm {
       const digK = clamp(this.dig * 1.6 - i / n * 0.6, 0, 1);
       let y = Math.max(g, W.water - 1) + this.rad * k * 0.95 + Math.sin(wave - i * 0.55) * 0.35 * S * (this.speed > 2 ? 1 : 0.3);
       y -= digK * (this.rad * 2.6 + 3); y -= sink * this.rad * k * 0.55;
+      if (this.fly) y += this.alts[i] + Math.sin(wave * 0.45 - i * 0.5) * 0.9 * S * Math.min(1, this.alts[i] / (4 * S + 0.01));
       if (i === 0) y += this.rear * 5.5 * S; else if (i < 5) y += this.rear * 5.5 * S * Math.pow(1 - i / 5, 1.6);
       p.set(x, y, z);
     }
@@ -174,11 +181,13 @@ export class Wyrm {
       else pl.damage(12, this.head, 10);
       return;
     }
-    if (hz.contact) for (let i = 0; i < 6; i++) { const q = this.pts[i]; if (Math.hypot(p.x - q.x, p.z - q.z) < this.rad * 1.15 + 0.5 && p.y < q.y + this.rad + 1) { pl.damage(30, q, 24); return; } }
+    if (this.st === 'inhale' && !(pl.dashT > 0)) { const dx = mouth.x - p.x, dz = mouth.z - p.z, d = Math.hypot(dx, dz), a = Math.abs(angDiff(this.yaw, Math.atan2(-dx, -dz)));
+      if (d < 46 * S && d > 1 && a < 0.75) { const pull = (this.boss ? 9.2 : 5) * (1 - d / (60 * S)) * G.dt; p.x += dx / d * pull; p.z += dz / d * pull; pl.pulled = 0.2; } }
+    if (hz.contact) for (let i = 0; i < 6; i++) { const q = this.pts[i]; if (Math.hypot(p.x - q.x, p.z - q.z) < this.rad * 1.15 + 0.5 && p.y < q.y + this.rad + 1 && p.y > q.y - this.rad * 1.6 - 1) { pl.damage(30, q, 24); return; } }
     if (hz.erupt && Math.hypot(p.x - hz.erupt.x, p.z - hz.erupt.z) < 7.5 * S) { if (pl.damage(34, hz.erupt, 12)) pl.vel.y = 22; return; }
     if (this.ring) { const d = Math.hypot(p.x - this.ring.x, p.z - this.ring.z); if (Math.abs(d - this.ring.r) < 1.6 && p.y < hAt(p.x, p.z) + 1.5) pl.damage(this.boss ? 22 : 8, this.ring, 10); }
     // 몸에 깔리지 않게 밀어냄
-    if (this.dig < 0.5) for (let i = 0; i <= this.segs; i += 1) { const q = this.pts[i], k = i === 0 ? 1.1 : this.segN[i - 1].userData.k, rr = this.rad * k * 0.9 + 0.4, dx = p.x - q.x, dz = p.z - q.z, d = Math.hypot(dx, dz); if (d < rr && d > 0.01 && p.y < q.y + this.rad * k * 0.8) { p.x = q.x + dx / d * rr; p.z = q.z + dz / d * rr; } }
+    if (this.dig < 0.5) for (let i = 0; i <= this.segs; i += 1) { const q = this.pts[i], k = i === 0 ? 1.1 : this.segN[i - 1].userData.k, rr = this.rad * k * 0.9 + 0.4, dx = p.x - q.x, dz = p.z - q.z, d = Math.hypot(dx, dz); if (d < rr && d > 0.01 && p.y < q.y + this.rad * k * 0.8 && p.y > q.y - this.rad * k * 1.6 - 1) { p.x = q.x + dx / d * rr; p.z = q.z + dz / d * rr; } }
   }
 
   /* ── 통신 ── */
@@ -190,8 +199,14 @@ export class Wyrm {
 function digSink(w, seg) { return clamp(w.dig * 1.6 - seg / w.segs * 0.6, 0, 1) * (w.rad * 2.6 + 3); }
 
 export function spawnMonsters() {
+  if (G.region === 2) {
+    G.boss = new Wyrm({ model: 'gorae', fly: true, name: '구름고래 「먹구름」', segs: 16, maxHp: 3400 });
+    [[160, -110], [-150, 170], [300, 90], [-90, -280], [-340, 280], [90, 380]].forEach(([x, z], i) => { if (hAt(x, z) > W.water + 1) G.mobs.push(new Wyrm({ id: 'm' + i, model: 'gorae', fly: true, scale: 0.26, segs: 7, maxHp: 190, boss: false, name: '새끼 구름고래', home: { x, z, r: 34 } })); });
+    [[-220, -60], [230, 330], [470, -40]].forEach(([x, z], i) => { if (hAt(x, z) > W.water + 1) G.mobs.push(new Wyrm({ id: 'g' + i, scale: 0.34, segs: 9, maxHp: 230, boss: false, name: '고원 아귀', home: { x, z, r: 30 } })); });
+  } else {
   G.boss = new Wyrm({});
   const spots = [[150, -90], [-140, 190], [300, 60], [-60, -260], [420, -180], [-330, 300], [60, 380]];
   spots.forEach(([x, z], i) => { if (hAt(x, z) > W.water + 1) G.mobs.push(new Wyrm({ id: 'm' + i, scale: 0.3, segs: 8, maxHp: 170, boss: false, name: '새끼 아귀', home: { x, z, r: 30 } })); });
+  }
   G.findTarget = (pos, yaw, range) => { let b = null, bd = range; for (const w of [G.boss, ...G.mobs]) { if (!w.alive) continue; const h = w.hitTest(pos.x, pos.y + 0.8, pos.z, range); if (h) { const d = Math.hypot(h.p.x - pos.x, h.p.z - pos.z); if (d < bd + w.rad) { bd = d; b = h.p; } } } return b; };
 }
