@@ -212,9 +212,9 @@ function vegetation() {
   const q = G.quality;
   // 큰 나무
   const big = place(r, Math.round(70 * q), (x, z) => openGround(x, z, 20) && Math.hypot(x, z) > 45 && forest(x, z) > 0.44 ? { s: 3.0 + r() * 4.2 } : null);
-  scatter('island_tree_02', big, { shadow: true, glow: 0x1fae8f, leafOnly: true, gk: 0.5 }); big.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.4 * t.s, big: 1, h: 3 * t.s }));
+  scatter('island_tree_02', big, { shadow: true, glow: 0x1fae8f, leafOnly: true, gk: 0.5 }); big.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.4 * t.s, big: 1, h: 3 * t.s, can: [t.x + Math.sin(t.ry) * 1.25 * t.s, t.y + 2.35 * t.s, t.z + Math.cos(t.ry) * 1.25 * t.s, 1.55 * t.s] }));
   const jac = place(r, Math.round(10 * q), (x, z) => openGround(x, z, 30) && Math.hypot(x, z) > 45 && forest(x, z) < 0.52 ? { s: 1.6 + r() * 1.8 } : null);
-  scatter('jacaranda_tree', jac, { shadow: true, glow: 0xb06cff, leafOnly: true, gk: 0.9 }); jac.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 1.25 * t.s, big: 1, h: 12 * t.s }));
+  scatter('jacaranda_tree', jac, { shadow: true, glow: 0xb06cff, leafOnly: true, gk: 0.9 }); jac.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 1.25 * t.s, big: 1, h: 12 * t.s, can: [t.x, t.y + 12.5 * t.s, t.z, 6.6 * t.s] }));
   const qv = place(r, Math.round(150 * q), (x, z) => openGround(x, z, 10) && Math.hypot(x, z) > 30 ? { s: 1.4 + r() * 2.6 } : null);
   scatter('quiver_tree_02', qv, { shadow: true }); qv.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.2 * t.s, h: 1.3 * t.s }));
   // 바위
@@ -361,7 +361,7 @@ function giants() {
   const r = rng(808), spots = [[-58, -74, 13], [150, 60, 11], [-170, 170, 15], [40, -330, 12], [-250, -120, 14], [360, 330, 12], [-420, 250, 13]], b = bounds('island_tree_02'), pos = [], seed = [];
   const list = spots.filter(([x, z]) => hAt(x, z) > W.water + 1).map(([x, z, s]) => ({ x, z, y: hAt(x, z) - 0.5, s, ry: r() * 6.28 }));
   scatter('island_tree_02', list, { shadow: true, glow: 0x35e0c0, leafOnly: true, gk: 0.9, max: 1400 });
-  for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 0.42 * t.s, big: 1, h: 60 });
+  for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 0.42 * t.s, big: 1, h: 60, can: [t.x + Math.sin(t.ry) * 1.25 * t.s, t.y + 2.35 * t.s, t.z + Math.cos(t.ry) * 1.25 * t.s, 1.55 * t.s] });
     const R = b.size.x * 0.42 * t.s, top = b.size.y * t.s;
     for (let k = 0; k < 90; k++) { const a = r() * 6.283, rr = Math.sqrt(r()) * R, ax = t.x + Math.cos(a) * rr, az = t.z + Math.sin(a) * rr, ay = t.y + top * (0.5 + r() * 0.3), len = 5 + r() * (top * 0.38), n = 9 + Math.floor(len * 0.9), sd = r();
       for (let i = 0; i < n; i++) { pos.push(ax, ay - (i / n) * len, az); seed.push(sd, i / n, len); } } }
@@ -392,6 +392,15 @@ function falls() {
       vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; vA = (0.25 + 0.75 * fract(aS.x * 7.3)) * smoothstep(0.0, 0.04, k) * mix(1.0, 0.55, splash); gl_PointSize = clamp(mix(60.0, 150.0, k) / -mv.z, 1.0, 14.0); }`,
     fragmentShader: `varying float vA; uniform float uNight; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, d); gl_FragColor = vec4(mix(vec3(0.55, 0.8, 1.0), vec3(0.45, 1.0, 0.92), uNight) * a * vA * 0.9, a * vA * 0.6); }` });
   const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; G.scene.add(pts);
+}
+
+// 카메라 자리 (x,y,z) 가 바위 · 줄기 · 수관 속인지
+export function camBlocked(x, y, z) {
+  if (y < Math.max(hAt(x, z), solidTop(x, z)) + 0.45) return true;
+  for (const c of nearColliders(x, z, 40)) { if (c.hf || c.h < 0) continue;
+    if (c.can) { const dx = x - c.can[0], dy = (y - c.can[1]) * 1.5, dz = z - c.can[2]; if (dx * dx + dy * dy + dz * dz < c.can[3] * c.can[3]) return true; }
+    const y0 = c.y0 === undefined ? hAt(c.x, c.z) : c.y0; if (y < y0 + (c.h || 6) && y > y0 - 1 && Math.hypot(x - c.x, z - c.z) < c.r + 0.3) return true; }
+  return false;
 }
 
 /* ───── 충돌 격자 ───── */

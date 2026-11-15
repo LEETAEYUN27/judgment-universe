@@ -1,7 +1,7 @@
 // 꼬물족 캐릭터 : 부위별 움직임(절차식 애니메이션) + 내 캐릭터 조작 + 카메라
 import { THREE, G, clamp, lerp, damp, dampAng, angDiff, dist2, emit } from './g.js';
 import { clone } from './assets.js';
-import { W, hAt, groundAt, nearColliders, solidTop } from './world.js';
+import { W, hAt, groundAt, nearColliders, solidTop, camBlocked } from './world.js';
 import { I, consume, readMove } from './input.js';
 
 const V = new THREE.Vector3();
@@ -178,8 +178,12 @@ export class Player {
     const dist = I.zoom + (fight ? 5.5 : 0) + Math.min(6, Math.hypot(this.vel.x, this.vel.z) * 0.08) + Math.max(0, this.pos.y - hAt(this.pos.x, this.pos.z) - 8) * 0.25;
     this.camDist = damp(this.camDist || dist, dist, 3, dt);
     V.set(this.pos.x, this.pos.y + 1.5 + (fight ? 1.2 : 0), this.pos.z); this.camTarget.lerp(V, 1 - Math.exp(-14 * dt));
-    const cp = Math.cos(I.pitch), px = this.camTarget.x + Math.sin(I.yaw) * cp * this.camDist, pz = this.camTarget.z + Math.cos(I.yaw) * cp * this.camDist; let py = this.camTarget.y + Math.sin(I.pitch) * this.camDist;
-    py = Math.max(py, Math.max(hAt(px, pz), solidTop(px, pz)) + 0.7);
+    // 시선이 바위 · 나무에 가리면 카메라를 당김 (빨리 당기고 천천히 풀림)
+    const cp = Math.cos(I.pitch), ux = Math.sin(I.yaw) * cp, uy = Math.sin(I.pitch), uz = Math.cos(I.yaw) * cp, T = this.camTarget; let free = this.camDist;
+    for (let d = 1.6; d < this.camDist; d += 0.9) if (camBlocked(T.x + ux * d, T.y + uy * d, T.z + uz * d)) { free = Math.max(1.4, d - 0.9); break; }
+    this.camFree = free < (this.camFree || free) ? damp(this.camFree, free, 22, dt) : damp(this.camFree || free, free, 2.5, dt); const cd = Math.min(this.camDist, this.camFree);
+    const px = T.x + ux * cd, pz = T.z + uz * cd; let py = T.y + uy * cd;
+    py = Math.max(py, hAt(px, pz) + 0.7);
     cam.position.set(px, py, pz);
     if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt * 1.8); const k = this.shake * this.shake * 0.9; cam.position.x += (Math.random() - 0.5) * k; cam.position.y += (Math.random() - 0.5) * k; cam.position.z += (Math.random() - 0.5) * k; }
     cam.lookAt(this.camTarget); cam.fov = damp(cam.fov, fight ? 66 : 58 + Math.min(8, Math.hypot(this.vel.x, this.vel.z) * 0.25), 4, dt); cam.updateProjectionMatrix();

@@ -1,7 +1,7 @@
 // 꼬물족 이야기 — 시작 · 반복 · 화면 표시
 import { THREE, G, clamp, damp, dist2, emit, on } from './g.js';
 import { loadAll, CHARS } from './assets.js';
-import { W, buildWorld, updateWorld, hAt, stepGlow, solidTop } from './world.js';
+import { W, buildWorld, updateWorld, hAt, stepGlow, solidTop, camBlocked } from './world.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { I, initInput, consume, press } from './input.js';
 import { Player, TUNE } from './player.js';
@@ -39,7 +39,7 @@ async function boot() {
   $('#loadTxt').textContent = '분지를 일구는 중…'; await new Promise(r => setTimeout(r, 30));
   buildWorld(); spawnMonsters(); initFx(); initLife(); initInput(canvas); events();
   $('#load i').style.width = '100%'; $('#loadTxt').textContent = '준비 끝! 꼬물족을 고르고 시작'; ['#solo', '#host', '#join'].forEach(s => $(s).disabled = false);
-  window.__g = G; window.__w = W; window.__tune = TUNE; window.__I = I; window.__hAt = hAt; window.__solidTop = solidTop; window.__THREE = THREE; window.__press = press; window.__life = { tryBuild, interact, nearest, eat }; G.ready = true;
+  window.__g = G; window.__w = W; window.__tune = TUNE; window.__I = I; window.__hAt = hAt; window.__solidTop = solidTop; window.__camBlocked = camBlocked; window.__THREE = THREE; window.__press = press; window.__life = { tryBuild, interact, nearest, eat }; G.ready = true;
   r.setAnimationLoop(loop);
   if (G.testMode) begin('solo');
 }

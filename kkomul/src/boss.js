@@ -1,6 +1,7 @@
 // 포식자 「아귀룡」과 새끼들 : 마디 몸통(앞을 따라가는 사슬) + 다리 IK + 예고 동작이 있는 공격
 import { THREE, G, clamp, lerp, damp, dampAng, angDiff, dist2, emit, ease } from './g.js';
-import { W, hAt, nearColliders } from './world.js';
+import { W, hAt, nearColliders, solidTop } from './world.js';
+const gAt = (x, z, cap) => { const g = hAt(x, z), t = solidTop(x, z); return t > g && t < g + cap ? t : g; };
 
 const V = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3(), X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(), M4 = new THREE.Matrix4(), UP = new THREE.Vector3(0, 1, 0);
 function pick(root, name) { let f = null; root.traverse(o => { if (o.name === name) f = o; }); return f; }
@@ -84,7 +85,17 @@ export class Wyrm {
     }
     if (turn > 0 && tp) { const dy = angDiff(this.yaw, aim), st = turn * dt; this.yaw += clamp(dy, -st, st); }
     this.speed = damp(this.speed, spd, this.st === 'bite' || this.st === 'charge' ? 30 : 5, dt);
+    const hx0 = this.head.x, hz0 = this.head.z;
     this.head.x += Math.sin(this.yaw) * this.speed * dt; this.head.z += Math.cos(this.yaw) * this.speed * dt;
+    // 바위 · 나무 : 못 넘는 것은 비켜서 돌아감 (돌진 · 잠행 중에는 예외)
+    if (this.alive && this.st !== 'charge' && this.st !== 'burrow' && this.st !== 'dive' && this.st !== 'erupt' && this.st !== 'eruptTell') {
+      const hr = this.rad * 0.9, cap = this.boss ? 7 : 0.9, mv = Math.max(Math.abs(this.speed), 3) * dt;
+      const bad = (x, z) => { if (solidTop(x, z) > hAt(x, z) + cap) return true; for (const c of nearColliders(x, z, 8)) { if (c.hf || c.h < 0 || c.node) continue; if (Math.hypot(x - c.x, z - c.z) < c.r + hr) return true; } return false; };
+      if (bad(this.head.x, this.head.z)) { this.side = this.side || (Math.random() < 0.5 ? 1 : -1); let ok = false;
+        for (const k of [0.5, 0.9, 1.3, 1.7, 2.1, 2.6, 3.14, -1.6, -2.4]) { const a = this.yaw + k * this.side, x = hx0 + Math.sin(a) * mv, z = hz0 + Math.cos(a) * mv; if (!bad(x, z)) { this.head.x = x; this.head.z = z; if (k < 0) this.side = -this.side; ok = true; break; } }
+        if (!ok) { this.head.x = hx0; this.head.z = hz0; } this.sideT = 2.5; }
+      else if (this.sideT > 0 && (this.sideT -= dt) <= 0) this.side = 0;
+    }
     if (this.boss) { const dh = dist2(this.head.x, this.head.z, this.home.x, this.home.z), lim = 330; if (dh > lim) { this.head.x = this.home.x + (this.head.x - this.home.x) * lim / dh; this.head.z = this.home.z + (this.head.z - this.home.z) * lim / dh; } }
     this.rear = damp(this.rear, rear, 9, dt); this.jaw = damp(this.jaw, jaw, 18, dt); this.dig = dig; this.glow = damp(this.glow, glow, 8, dt);
     if (this.ring) { this.ring.r += 30 * dt; if (this.ring.r > this.ring.max) this.ring = null; }
@@ -101,7 +112,7 @@ export class Wyrm {
     for (let i = 0; i <= n + 1; i++) {
       const p = this.pts[i]; let x, z;
       if (i === 0) { x = this.head.x; z = this.head.z; } else { const a = this.along(i * this.spacing + 1.2 * S); x = a[0]; z = a[1]; }
-      const k = i === 0 ? 1 : (this.segN[i - 1] ? this.segN[i - 1].userData.k : 0.4), g = hAt(x, z);
+      const k = i === 0 ? 1 : (this.segN[i - 1] ? this.segN[i - 1].userData.k : 0.4), g = gAt(x, z, this.boss ? 7 : 0.9);
       const digK = clamp(this.dig * 1.6 - i / n * 0.6, 0, 1);
       let y = Math.max(g, W.water - 1) + this.rad * k * 0.95 + Math.sin(wave - i * 0.55) * 0.35 * S * (this.speed > 2 ? 1 : 0.3);
       y -= digK * (this.rad * 2.6 + 3); y -= sink * this.rad * k * 0.55;
@@ -121,7 +132,7 @@ export class Wyrm {
     for (const L of this.legs) {
       const seg = this.segN[L.seg], k = seg.userData.k; X.set(1, 0, 0).applyQuaternion(seg.quaternion).multiplyScalar(L.side); Z.set(0, 0, 1).applyQuaternion(seg.quaternion);
       const hip = V.copy(seg.position).addScaledVector(X, 1.45 * S * k); hip.y -= 0.2 * S;
-      const want = V2.copy(hip).addScaledVector(X, 4.6 * S * k).addScaledVector(Z, 2.0 * S); want.y = hAt(want.x, want.z);
+      const want = V2.copy(hip).addScaledVector(X, 4.6 * S * k).addScaledVector(Z, 2.0 * S); want.y = gAt(want.x, want.z, 7);
       if (!L.init) { L.foot.copy(want); L.init = true; L.t = 1; }
       const far = L.foot.distanceTo(want), stepLen = 4.2 * S * (((L.seg >> 1) + (L.side > 0 ? 0 : 1)) % 2 ? 1 : 1.25);
       if (L.t >= 1 && far > stepLen && this.alive) { L.from.copy(L.foot); L.to.copy(want).addScaledVector(Z, 2.4 * S * Math.min(1, this.speed / 10)); L.to.y = hAt(L.to.x, L.to.z); L.t = 0; }
