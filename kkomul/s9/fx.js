@@ -30,7 +30,7 @@ export function updateFx(dt) {
 }
 const v3 = new THREE.Vector3();
 export function number(x, y, z, text, cls = '') {
-  v3.set(x, y, z).project(G.camera); if (v3.z > 1) return; const el = document.createElement('div'); el.className = 'dmg ' + cls; el.textContent = text; el.style.left = ((v3.x * 0.5 + 0.5) * innerWidth + (Math.random() - 0.5) * 30) + 'px'; el.style.top = ((-v3.y * 0.5 + 0.5) * innerHeight) + 'px'; document.getElementById('fxlayer').appendChild(el); setTimeout(() => el.remove(), 900);
+  v3.set(x, y, z).project(G.camera); if (v3.z > 1) return; const el = document.createElement('div'); el.className = 'dmg ' + cls; el.textContent = text; el.style.left = ((v3.x * 0.5 + 0.5) * innerWidth + (Math.random() - 0.5) * 30) + 'px'; el.style.top = ((-v3.y * 0.5 + 0.5) * innerHeight) + 'px'; document.getElementById('fxlayer').appendChild(el); setTimeout(() => el.remove(), cls === 'say' ? 2200 : 900);
 }
 /* 소리 : 받아 둔 음원이 없어 웹 오디오 합성음으로 대체 (인계 카드에 명시) */
 let ac = null, master = null;

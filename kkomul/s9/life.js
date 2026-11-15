@@ -5,11 +5,12 @@ import { W, hAt, slopeAt, addCollider, solid } from './world.js';
 import { Char } from './player.js';
 import { burst, number, sfx } from './fx.js';
 
-export const ITEM = { fruit: ['별열매', '🍎'], wood: ['나무', '🪵'], stone: ['돌', '🪨'], dust: ['빛가루', '✨'], seed: ['씨앗', '🌱'] };
+export const ITEM = { fruit: ['별열매', '🍎'], roast: ['구운 열매', '🍢'], wood: ['나무', '🪵'], stone: ['돌', '🪨'], dust: ['빛가루', '✨'], seed: ['씨앗', '🌱'] };
 export const BUILD = [
   { k: 'fire', name: '모닥불 화로', model: 'barrel_stove', s: 1.6, cost: { wood: 4, stone: 3 }, desc: '곁에 있으면 체력이 차오름', r: 1.0 },
   { k: 'farm', name: '텃밭', model: 'planter_box_01', s: 2.2, cost: { wood: 3 }, desc: '씨앗을 심으면 별열매가 열림', r: 0.9 },
   { k: 'lamp', name: '등불', model: 'Lantern_01', s: 3.0, cost: { wood: 1, dust: 2 }, desc: '주변을 밝힘', r: 0.3 },
+  { k: 'pad', name: '바람꽃 화분', model: 'flower_gazania', s: 6.5, cost: { dust: 5, wood: 2 }, desc: '밟으면 바라보던 쪽으로 높이 날아오름', r: 1.2 },
   { k: 'hut', name: '오두막', model: 'hut', s: 1.15, cost: { wood: 14, stone: 8 }, desc: '쓰러지면 여기서 다시 일어남', r: 2.6 },
 ];
 const NPCS = [];
@@ -77,7 +78,8 @@ export function nearest(p) {
   let best = null, bd = 1e9;
   for (const n of NPCS) { const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && d < bd) { bd = d; best = { kind: 'npc', n, label: n.id === 'chief' ? CHIEF + '과 이야기' : '상인과 거래' }; } }
   for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : n.type === 'gate' ? (gateOpen() ? '바람문 : 다른 지역으로 떠나기' : '닫힌 바람문') : '상자 열기' }; } }
-  for (const b of G.builds) { if (b.k !== 'farm') continue; const d = dist2(p.x, p.z, b.x, b.z); if (d < 2.6 && d < bd) { const st = b.state || 0; if (st === 0 && G.inv.seed > 0) { bd = d; best = { kind: 'farm', b, label: '씨앗 심기' }; } else if (st === 2) { bd = d; best = { kind: 'farm', b, label: '수확하기' }; } } }
+  for (const b of G.builds) { if (b.k === 'fire') { const d = dist2(p.x, p.z, b.x, b.z); if (d < 3.4 && d < bd && G.inv.fruit >= 3) { bd = d; best = { kind: 'cook', b, label: '별열매 굽기 (열매 3 → 구운 열매 1)' }; } continue; }
+    if (b.k !== 'farm') continue; const d = dist2(p.x, p.z, b.x, b.z); if (d < 2.6 && d < bd) { const st = b.state || 0; if (st === 0 && G.inv.seed > 0) { bd = d; best = { kind: 'farm', b, label: '씨앗 심기' }; } else if (st === 2) { bd = d; best = { kind: 'farm', b, label: '수확하기' }; } } }
   return best;
 }
 export function interact(t) {
@@ -85,6 +87,7 @@ export function interact(t) {
   if (t.kind === 'npc') { t.n.id === 'chief' ? talkChief() : talkMerchant(); return; }
   if (t.kind === 'node') { if (t.n.type === 'gate') emit('gate'); else takeNode(t.n, true); return; }
   if (t.kind === 'farm') { farmAct(t.b, true); }
+  if (t.kind === 'cook' && G.inv.fruit >= 3) { G.inv.fruit -= 3; gain('roast', 1, { x: t.b.x, y: hAt(t.b.x, t.b.z), z: t.b.z }); burst(t.b.x, hAt(t.b.x, t.b.z) + 1.2, t.b.z, 16, 0xffb060, 3, 0.35, 4); sfx.eat(); G.stats.cooked = (G.stats.cooked || 0) + 1; }
 }
 function gain(k, n, pos) { G.inv[k] += n; number(pos.x, pos.y + 1.6, pos.z, `+${n} ${ITEM[k][0]}`, 'gain'); emit('inv'); }
 export function takeNode(n, mine) {
@@ -101,7 +104,10 @@ function onStrike(s) {       // 도끼질 : 그루터기 · 바위
   }
 }
 export function nodeRemote(id) { const n = W.nodes.find(x => x.id === id); if (!n || !n.ready) return; if (n.type === 'wood' || n.type === 'stone') { n.ready = false; n.obj.visible = false; n.respawn = G.time + 120; for (const c of W.colliders) if (c.node === n) c.off = true; } else takeNode(n, false); }
-export function eat() { if (G.inv.fruit <= 0 || G.me.hp >= G.me.maxHp || G.me.dead) return; G.inv.fruit--; G.me.heal(32); sfx.eat(); number(G.me.pos.x, G.me.pos.y + 1.8, G.me.pos.z, '+32', 'heal'); G.me.ch.st.cheer = 0.4; emit('inv'); }
+export function eat() {      // 구운 열매가 있으면 먼저 먹음 : 크게 회복 + 40초 동안 힘이 솟음(공격 +30%)
+  const me = G.me; if (me.dead) return;
+  if (G.inv.roast > 0 && (me.hp < me.maxHp || !(G.buffUntil > G.time))) { G.inv.roast--; me.heal(80); G.buffUntil = G.time + 40; sfx.eat(); number(me.pos.x, me.pos.y + 1.8, me.pos.z, '+80 · 힘이 솟음!', 'heal'); me.ch.st.cheer = 0.8; emit('inv'); return; }
+  if (G.inv.fruit <= 0 || me.hp >= me.maxHp) return; G.inv.fruit--; me.heal(32); sfx.eat(); number(me.pos.x, me.pos.y + 1.8, me.pos.z, '+32', 'heal'); me.ch.st.cheer = 0.4; emit('inv'); }
 
 /* ───── 짓기 ───── */
 export function canAfford(b) { return Object.entries(b.cost).every(([k, v]) => G.inv[k] >= v); }
@@ -118,7 +124,9 @@ export function tryBuild(k) {
 export function placeBuild(item, mine) {
   const b = BUILD.find(x => x.k === item.k), o = clone(b.model); o.scale.setScalar(b.s); o.position.set(item.x, hAt(item.x, item.z), item.z); o.rotation.y = item.ry;
   o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); G.scene.add(o); item.obj = o; G.builds.push(item);
-  if (item.k !== 'hut') addCollider({ x: item.x, z: item.z, r: b.r, h: 2 });
+  if (item.k === 'pad') { const yaw = item.ry - Math.PI; o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.emissive = new THREE.Color(0x35ffd0); m.material.emissiveMap = m.material.map; m.material.emissiveIntensity = 1.4; m.material.alphaTest = 0.4; m.material.side = THREE.DoubleSide; } });
+    W.pads.push({ x: item.x, z: item.z, y: o.position.y, r: 1.9, power: 34, dir: [Math.sin(yaw), Math.cos(yaw)], dist: 22, obj: o }); }
+  else if (item.k !== 'hut') addCollider({ x: item.x, z: item.z, r: b.r, h: 2 });
   else { const c = Math.cos(item.ry), s = Math.sin(item.ry); for (const [lx, lz] of [[-1.7, 0], [1.7, 0], [0, 1.7], [-1.3, -1.7], [1.3, -1.7]]) addCollider({ x: item.x + lx * b.s * c + lz * b.s * s, z: item.z - lx * b.s * s + lz * b.s * c, r: 0.8, h: 3 }); }
   if (item.k === 'fire') { const l = new THREE.PointLight(0xff8a3c, 30, 30, 1.6); l.position.set(0, 0.9 / b.s, 0); o.add(l); item.light = l; }
   if (item.k === 'lamp') { const l = new THREE.PointLight(0xffd08a, 18, 24, 1.7); l.position.set(0, 0.3, 0); o.add(l); o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.emissive = new THREE.Color(0xffb060); m.material.emissiveIntensity = 0.6; } }); }

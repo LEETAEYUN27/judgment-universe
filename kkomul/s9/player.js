@@ -150,7 +150,7 @@ export class Player {
     }
     if (this.atk >= 0) {
       this.atk += dt / (T.atkTime * (this.combo === 2 ? 1.5 : 1));
-      if (!this.hitDone && this.atk > 0.32) { this.hitDone = true; const dmg = (T.atkDmg + G.weaponLv * 9) * (this.combo === 2 ? 1.9 : 1) * (this.grounded ? 1 : 1.25); emit('strike', { x: this.pos.x + Math.sin(this.yaw) * 1.3, y: this.pos.y + 0.8, z: this.pos.z + Math.cos(this.yaw) * 1.3, r: T.atkRange * (this.combo === 2 ? 1.25 : 1), dmg, yaw: this.yaw, spin: this.combo === 2 }); }
+      if (!this.hitDone && this.atk > 0.32) { this.hitDone = true; const dmg = (T.atkDmg + G.weaponLv * 9) * (G.buffUntil > G.time ? 1.3 : 1) * (this.combo === 2 ? 1.9 : 1) * (this.grounded ? 1 : 1.25); emit('strike', { x: this.pos.x + Math.sin(this.yaw) * 1.3, y: this.pos.y + 0.8, z: this.pos.z + Math.cos(this.yaw) * 1.3, r: T.atkRange * (this.combo === 2 ? 1.25 : 1), dmg, yaw: this.yaw, spin: this.combo === 2 }); }
       if (this.atk >= 1) { this.atk = -1; this.comboT = 0.45; }
     }
     this.stam = Math.min(100, this.stam + T.stamRegen * dt * (this.dashT > 0 ? 0 : 1));

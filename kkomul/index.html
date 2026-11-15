@@ -50,6 +50,7 @@ input{font-family:inherit;user-select:text;-webkit-user-select:text}
 @keyframes pop{from{transform:scale(.7);opacity:0}}
 #help{left:max(12px,env(safe-area-inset-left));bottom:max(64px,calc(env(safe-area-inset-bottom) + 64px));padding:8px 12px;font-size:12.5px;line-height:1.7;color:var(--ink2);opacity:.92} #help kbd{font-family:inherit;background:var(--ink);color:var(--paper);border-radius:5px;padding:0 6px;font-size:11.5px}
 #fxlayer{inset:0;overflow:hidden} .dmg{position:absolute;font-family:var(--h);font-weight:700;font-size:30px;color:#fff;text-shadow:0 2px 0 #40200f,0 0 8px rgba(0,0,0,.5);animation:rise .9s forwards;transform:translate(-50%,-50%);white-space:nowrap} .dmg.crit{font-size:42px;color:#ffd84a} .dmg.gain{font-size:22px;color:#b9ffd0} .dmg.heal{color:#8dffb0;font-size:24px}
+.dmg.say{font-size:22px;color:#3a2a1a;background:#fff6e0;border:2px solid #3a2a1a;border-radius:14px;padding:3px 12px;text-shadow:none;animation:rise 2.2s forwards}
 @keyframes rise{0%{opacity:0;margin-top:10px;transform:translate(-50%,-50%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.25)}100%{opacity:0;margin-top:-70px;transform:translate(-50%,-50%) scale(1)}}
 #hurt{inset:0;background:radial-gradient(ellipse at center,rgba(255,0,0,0) 45%,rgba(255,30,10,.55) 100%);opacity:0;transition:opacity .25s}
 #dead{inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,6,6,.55)} #dead div{padding:18px 30px;text-align:center;font-family:var(--h);font-size:30px} #dead small{display:block;font-family:var(--f);font-size:15px;color:var(--ink2);margin-top:6px}
@@ -90,7 +91,7 @@ body.mobile #prompt{bottom:190px}
   <div id="toasts"></div>
   <div id="prompt" class="sheet"></div>
   <div id="inv" class="sheet"></div>
-  <div id="help" class="sheet"><kbd>클릭</kbd> 후 마우스 = 시선 회전 (또는 끌기 · <kbd>← →</kbd>)<br><kbd>WASD</kbd> 이동 · <kbd>Space</kbd> 점프(2단) · 공중에서 꾹 = 활공 · <kbd>Shift</kbd> 구르기<br><kbd>왼쪽 클릭</kbd> 도끼질 · <kbd>E</kbd> 줍기/대화 · <kbd>B</kbd> 짓기 · <kbd>F</kbd> 열매 먹기</div>
+  <div id="help" class="sheet"><kbd>클릭</kbd> 후 마우스 = 시선 회전 (또는 끌기 · <kbd>← →</kbd>)<br><kbd>WASD</kbd> 이동 · <kbd>Space</kbd> 점프(2단) · 공중에서 꾹 = 활공 · <kbd>Shift</kbd> 구르기<br><kbd>왼쪽 클릭</kbd> 도끼질 · <kbd>E</kbd> 줍기/대화 · <kbd>B</kbd> 짓기 · <kbd>F</kbd> 열매 먹기 · <kbd>1~4</kbd> 한마디</div>
   <div id="dead"><div class="sheet">꿀꺽… 쓰러짐<small>잠시 뒤 보금자리에서 다시 일어남</small></div></div>
   <div id="dialog" class="sheet"><span class="who" id="dWho"></span><p id="dText"></p><div class="acts" id="dActs"></div></div>
   <div id="build" class="sheet"><h3>무엇을 지을까 <button id="bClose">닫기 (B)</button></h3><div class="grid" id="bGrid"></div></div>
@@ -100,6 +101,6 @@ body.mobile #prompt{bottom:190px}
 
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
-<script type="module" src="s8/main.js"></script>
+<script type="module" src="s9/main.js"></script>
 </body>
 </html>

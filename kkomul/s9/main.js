@@ -114,6 +114,7 @@ function events() {
   on('land', e => { stepGlow(e.pos.x, e.pos.z); sfx.land(); burst(e.pos.x, e.pos.y + 0.1, e.pos.z, Math.min(16, 4 + e.v), 0xc8c0a0, 3, 0.45, 1.5, 6, 0.5); }); on('step', p => { sfx.step(); stepGlow(p.x, p.z); }); on('pad', p => { sfx.pad(); burst(p.x, p.y + 1, p.z, 50, 0x35ffd0, 9, 0.6, 14, 4, 1.1); toast('바람꽃을 타고 날아오름!'); });
   on('hitstop', t => { hitstop = Math.max(hitstop, t); }); on('toast', toast); on('inv', invUI); on('quest', questUI); on('roster', () => { const n = G.net ? G.net.count : 1; $('#roomN').textContent = n; if (isHost() && G.boss.alive) { const b = G.boss, base = 2600, nm = Math.round(base * (1 + 0.6 * (n - 1))); b.hp = Math.round(b.hp / b.maxHp * nm); b.maxHp = nm; } });
   on('dialog', openDialog);
+  on('say', m => { const r = G.others.get(m.id); if (!r) return; bubble(r.pos, SAY[m.i]); toast((r.ch.tagName || '친구') + ' : ' + SAY[m.i]); if (m.i === 0 || m.i === 3) r.ch.st.cheer = 1; });
   on('gate', () => {
     const open = regionsOpen().filter(r => r !== G.region);
     if (!open.length) { toast('바람문이 잠들어 있음. ' + G.boss.name + '을(를) 쓰러뜨리면 열림'); return; }
@@ -122,7 +123,8 @@ function events() {
   });
   on('travel', m => { toast('방장을 따라 다른 지역으로 건너감…'); setTimeout(() => travel(m.r, { mode: 'join', code: G.net.code }), 600); });
   $('#bClose').onclick = () => toggleBuild(false);
-  addEventListener('keydown', e => { if (e.code === 'Escape') { toggleBuild(false); } if (/^Digit[1-4]$/.test(e.code) && $('#build').style.display === 'block') { tryBuild(BUILD[+e.code.slice(5) - 1].k); toggleBuild(false); } if ((e.code === 'Enter' || e.code === 'KeyE' || e.code === 'Space') && dlg) { e.preventDefault(); dlgNext(); } });
+  addEventListener('keydown', e => { if (e.code === 'Escape') { toggleBuild(false); } if (/^Digit[1-4]$/.test(e.code) && $('#build').style.display !== 'block' && G.started && !dlg && document.activeElement.tagName !== 'INPUT') say(+e.code.slice(5) - 1);
+    if (/^Digit[1-5]$/.test(e.code) && $('#build').style.display === 'block') { tryBuild(BUILD[+e.code.slice(5) - 1].k); toggleBuild(false); } if ((e.code === 'Enter' || e.code === 'KeyE' || e.code === 'Space') && dlg) { e.preventDefault(); dlgNext(); } });
   addEventListener('beforeunload', save);
 }
 
@@ -148,6 +150,10 @@ function questDir() {
   el.style.display = 'flex'; $('#qArrow').style.transform = `rotate(${(-a * 57.3).toFixed(0)}deg)`; $('#qDist').textContent = `${qT.n} ${Math.round(d)}걸음`;
 }
 function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '잠든 화산섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 고원을 지켜 냄. 바람문으로 잠든 화산섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 고원에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
+// 한마디 : 숫자 1~4 (머리 위 말풍선, 같은 방 친구에게도 보임)
+const SAY = ['👋 안녕!', '🆘 도와줘!', '➡️ 이리 와!', '😆 ㅋㅋㅋ']; let sayT = 0;
+function bubble(pos, text) { number(pos.x, pos.y + 2.6, pos.z, text, 'say'); }
+function say(i) { if (!G.me || G.time < sayT || !SAY[i]) return; sayT = G.time + 0.8; bubble(G.me.pos, SAY[i]); if (i === 0 || i === 3) G.me.ch.st.cheer = 1; if (G.net) G.net.send({ t: 'say', id: G.net.id, i }); }
 function buildUI() { const g = $('#bGrid'); if (!g) return; g.innerHTML = BUILD.map((b, i) => `<button class="it ${canAfford(b) ? '' : 'no'}" data-k="${b.k}">${i + 1}. ${b.name}<small>${b.desc}</small><b>${Object.entries(b.cost).map(([k, v]) => `${ITEM[k][1]}${v}`).join(' ')}</b></button>`).join(''); g.querySelectorAll('.it').forEach(el => el.onclick = () => { tryBuild(el.dataset.k); toggleBuild(false); }); }
 function toggleBuild(v) { const el = $('#build'), on = v === undefined ? el.style.display !== 'block' : v; if (on && dlg) return; el.style.display = on ? 'block' : 'none'; G.ui.blocked = on || !!dlg; if (on) { buildUI(); document.exitPointerLock && document.exitPointerLock(); } }
 let dlg = null;
