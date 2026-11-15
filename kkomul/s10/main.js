@@ -133,6 +133,7 @@ function toast(t) { const el = document.createElement('div'); el.className = 'to
 function invUI() { const el = $('#inv'); const prev = el._v || {}; el.innerHTML = Object.keys(ITEM).map(k => `<div data-k="${k}" class="${prev[k] !== undefined && prev[k] !== G.inv[k] ? 'bump' : ''}" title="${ITEM[k][0]}">${ITEM[k][1]}<b>${G.inv[k]}</b></div>`).join('') + `<div title="도끼 단계">🪓<b>${G.weaponLv + 1}</b></div>`; el._v = Object.assign({}, G.inv); buildUI(); }
 // 퀘스트 목표 방향 · 거리
 function questTarget() {
+  if (G.starAt && G.me) return { x: G.starAt.x, z: G.starAt.z, n: '별똥별' };
   const q = QUESTS[G.quest], me = G.me, chief = { x: W.spawn.x - 7, z: W.spawn.z + 3, n: CHIEF }; if (!q || !me) return null; if (G.questProg === 0 || q.check()) return chief;
   const near = (list, n) => { let b = null, bd = 1e9; for (const o of list) { const d = dist2(me.pos.x, me.pos.z, o.x, o.z); if (d < bd) { bd = d; b = o; } } return b && { x: b.x, z: b.z, n }; };
   const t = q.tgt ? q.tgt() : null; if (!t) return null; const NM = { fruit: '별열매', wood: '나무', stone: '돌', dust: '빛나는 꽃', chest: '하늘섬 바람꽃' };

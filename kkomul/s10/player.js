@@ -95,7 +95,7 @@ export class Player {
   }
   damage(d, from, knock = 14) {
     if (this.inv > 0 || this.dead) return false;
-    this.hp -= d; this.inv = 0.9; this.ch.hit(); this.shake = Math.max(this.shake, 0.6); emit('hurt', { d });
+    d *= 1 - 0.12 * G.up.guard; this.hp -= d; this.inv = 0.9; this.ch.hit(); this.shake = Math.max(this.shake, 0.6); emit('hurt', { d });
     if (from) { const dx = this.pos.x - from.x, dz = this.pos.z - from.z, l = Math.hypot(dx, dz) || 1; this.vel.x = dx / l * knock; this.vel.z = dz / l * knock; this.vel.y = 9; this.grounded = false; }
     if (this.hp <= 0) this.die(); return true;
   }
@@ -115,7 +115,7 @@ export class Player {
     const canAct = !this.dead && !G.ui.blocked;
     if (!canAct) { mx = mz = 0; }
     const swim = this.pos.y < W.water - 0.35 && hAt(this.pos.x, this.pos.z) < W.water - 0.5;
-    const maxS = T.run * (swim ? 0.55 : 1) * (this.atk >= 0 && this.atk < 0.6 ? 0.55 : 1);
+    const maxS = T.run * (1 + 0.1 * G.up.speed) * (swim ? 0.55 : 1) * (this.atk >= 0 && this.atk < 0.6 ? 0.55 : 1);
     // 대시
     if (canAct && consume('dash') && this.dashCd <= 0 && this.stam >= T.dashCost && (this.grounded || !this.airDash)) {
       let dx = mx, dz = mz; if (ml < 0.1) { dx = Math.sin(this.yaw); dz = Math.cos(this.yaw); } const l = Math.hypot(dx, dz);
@@ -153,7 +153,7 @@ export class Player {
       if (!this.hitDone && this.atk > 0.32) { this.hitDone = true; const dmg = (T.atkDmg + G.weaponLv * 9) * (G.buffUntil > G.time ? 1.3 : 1) * (this.combo === 2 ? 1.9 : 1) * (this.grounded ? 1 : 1.25); emit('strike', { x: this.pos.x + Math.sin(this.yaw) * 1.3, y: this.pos.y + 0.8, z: this.pos.z + Math.cos(this.yaw) * 1.3, r: T.atkRange * (this.combo === 2 ? 1.25 : 1), dmg, yaw: this.yaw, spin: this.combo === 2 }); }
       if (this.atk >= 1) { this.atk = -1; this.comboT = 0.45; }
     }
-    this.stam = Math.min(100, this.stam + T.stamRegen * dt * (this.dashT > 0 ? 0 : 1));
+    this.stam = Math.min(100, this.stam + T.stamRegen * (1 + 0.3 * G.up.stam) * dt * (this.dashT > 0 ? 0 : 1));
     // 이동 · 충돌
     const ox = this.pos.x, oz = this.pos.z;
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt; this.pos.y += this.vel.y * dt;

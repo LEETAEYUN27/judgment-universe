@@ -1,7 +1,7 @@
 // 같이 하기 : 방장 브라우저가 중심이 되는 P2P (PeerJS 무료 중계 서버는 연결 주선만 담당). 최대 10명.
 import { G, emit } from './g.js';
 import { Remote } from './player.js';
-import { nodeRemote, placeBuild, farmRemote } from './life.js';
+import { nodeRemote, placeBuild, farmRemote, spawnStar } from './life.js';
 const PRE = 'kkomul-world-v1-', MAXP = 10;
 export class Net {
   constructor() { this.host = false; this.peer = null; this.conns = new Map(); this.up = null; this.id = null; this.code = null; this.sendT = 0; this.bossT = 0; }
@@ -49,7 +49,7 @@ export class Net {
     if (m.t === 'hitfx') { emit('hitfx', m); return; }
     this.world(m);
   }
-  world(m) { if (m.t === 'node') nodeRemote(m.id); else if (m.t === 'build') placeBuild(m.item, false); else if (m.t === 'farm') farmRemote(m.x, m.z); else if (m.t === 'say') emit('say', m); }
+  world(m) { if (m.t === 'node') nodeRemote(m.id); else if (m.t === 'build') placeBuild(m.item, false); else if (m.t === 'farm') farmRemote(m.x, m.z); else if (m.t === 'say') emit('say', m); else if (m.t === 'star') spawnStar(m.x, m.z, m.id); }
   update(dt) {
     this.sendT -= dt; const me = G.me;
     if (this.sendT <= 0) { this.sendT = 0.066; const m = { t: 'p', id: this.id, x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), yaw: +me.yaw.toFixed(2), g: me.grounded ? 1 : 0, gl: me.gliding ? 1 : 0, d: me.dashT > 0 ? 1 : 0, a: me.atk >= 0 && me.atk < 0.2 ? 0 : -1, c: me.combo, hp: Math.round(me.hp), dead: me.dead ? 1 : 0, hit: me.ch.flash > 0.8 ? 1 : 0 }; this.send(m); }

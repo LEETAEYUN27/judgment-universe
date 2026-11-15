@@ -68,7 +68,7 @@ export const gateOpen = () => regionsOpen().some(r => r !== G.region);
 // 다른 지역으로 : 소지품 · 도끼 · 체력은 가져가고, 퀘스트 · 건물은 지역마다 따로 저장
 export function travel(to, auto) {
   save();
-  try { const key = SAVEKEY(to), t = JSON.parse(localStorage.getItem(key) || '{}'); t.inv = G.inv; t.weaponLv = G.weaponLv; t.maxHp = G.me ? G.me.maxHp : t.maxHp; localStorage.setItem(key, JSON.stringify(t));
+  try { const key = SAVEKEY(to), t = JSON.parse(localStorage.getItem(key) || '{}'); t.inv = G.inv; t.up = G.up; t.weaponLv = G.weaponLv; t.maxHp = G.me ? G.me.maxHp : t.maxHp; localStorage.setItem(key, JSON.stringify(t));
     localStorage.setItem('mochi_region', String(to)); if (auto) sessionStorage.setItem('mochi_auto', JSON.stringify(auto)); } catch (e) { }
   G.leaving = true; const q = new URLSearchParams(location.search); q.delete('map'); const qs = q.toString(); location.href = location.pathname + (qs ? '?' + qs : '');
 }
@@ -77,7 +77,7 @@ export function travel(to, auto) {
 export function nearest(p) {
   let best = null, bd = 1e9;
   for (const n of NPCS) { const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && d < bd) { bd = d; best = { kind: 'npc', n, label: n.id === 'chief' ? CHIEF + '과 이야기' : '상인과 거래' }; } }
-  for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : n.type === 'gate' ? (gateOpen() ? '바람문 : 다른 지역으로 떠나기' : '닫힌 바람문') : '상자 열기' }; } }
+  for (const n of W.nodes) { if (!n.ready || n.type === 'wood' || n.type === 'stone') continue; const d = dist2(p.x, p.z, n.x, n.z); if (d < n.r && Math.abs(p.y - n.y) < 4 && d < bd) { bd = d; best = { kind: 'node', n, label: n.type === 'fruit' ? '별열매 따기' : n.type === 'dust' ? '빛가루 모으기' : n.type === 'star' ? '별똥별 줍기' : n.type === 'gate' ? (gateOpen() ? '바람문 : 다른 지역으로 떠나기' : '닫힌 바람문') : '상자 열기' }; } }
   for (const b of G.builds) { if (b.k === 'fire') { const d = dist2(p.x, p.z, b.x, b.z); if (d < 3.4 && d < bd && G.inv.fruit >= 3) { bd = d; best = { kind: 'cook', b, label: '별열매 굽기 (열매 3 → 구운 열매 1)' }; } continue; }
     if (b.k !== 'farm') continue; const d = dist2(p.x, p.z, b.x, b.z); if (d < 2.6 && d < bd) { const st = b.state || 0; if (st === 0 && G.inv.seed > 0) { bd = d; best = { kind: 'farm', b, label: '씨앗 심기' }; } else if (st === 2) { bd = d; best = { kind: 'farm', b, label: '수확하기' }; } } }
   return best;
@@ -94,6 +94,7 @@ export function takeNode(n, mine) {
   if (!n.ready) return; n.ready = false; const p = { x: n.x, y: n.y, z: n.z };
   if (n.type === 'fruit') { n.fruits.forEach(f => f.visible = false); n.respawn = G.time + 75; if (mine) gain('fruit', 3, p); burst(n.x, n.y + 1.2, n.z, 14, 0xff5a7a, 3, 0.35, 3); }
   else if (n.type === 'dust') { n.obj.visible = false; n.respawn = G.time + 100; if (mine) gain('dust', 1, p); burst(n.x, n.y + 0.8, n.z, 22, 0xffd45a, 3, 0.4, 4, 2, 1.2); }
+  else if (n.type === 'star') { n.obj.visible = false; n.respawn = Infinity; if (mine) { gain('dust', 4, p); G.inv.seed += 1; G.stats.stars = (G.stats.stars || 0) + 1; } burst(n.x, n.y + 1, n.z, 40, 0xffd45a, 7, 0.5, 7, 6, 1.1); if (G.starAt && G.starAt.id === n.id) G.starAt = null; }
   else if (n.type === 'chest') { n.respawn = Infinity; if (mine) { G.stats.chests = (G.stats.chests || 0) + 1; gain('dust', 5, p); G.inv.seed += 2; G.weaponLv++; emit('toast', '상자에서 빛가루 5 · 씨앗 2를 얻고, 도끼가 한층 날카로워짐!'); } burst(n.x, n.y + 1, n.z, 40, 0x9affe0, 6, 0.5, 6, 6, 1.2); n.obj.rotation.x = -0.25; }
   if (mine) { sfx.pick(); G.net && G.net.send({ t: 'node', id: n.id }); G.me.ch.st.cheer = 0.5; }
 }
@@ -151,15 +152,39 @@ function talkChief() {
   if (q.check()) { if (q.take) q.take(); const rw = q.reward(); emit('dialog', { who: CHIEF, lines: [q.done, `〔보상〕 ${rw}`], end: () => { G.quest++; G.questProg = 0; emit('quest'); emit('inv'); sfx.quest(); G.me.ch.st.cheer = 1.2; save(); if (QUESTS[G.quest]) talkChief(); } }); }
   else emit('dialog', { who: CHIEF, lines: [(R3 ? '아직이네. ' : R2 ? '아직이구나. ' : '아직이구먼. ') + q.goal + '.'] });
 }
+// 떠돌이 상인 : 빛가루로 몸과 장비를 키움 (신발 · 망토 · 기력은 모든 지역에서 유지)
+const SHOP = [
+  { n: '튼튼 물약', d: '최대 체력 +20', cost: 4, max: 4, lv: () => G.stats.hpBuy || 0, buy: () => { G.stats.hpBuy = (G.stats.hpBuy || 0) + 1; G.me.maxHp += 20; G.me.hp = G.me.maxHp; } },
+  { n: '바람 신발', d: '달리기 +10%', cost: 7, max: 2, lv: () => G.up.speed, buy: () => { G.up.speed++; } },
+  { n: '솜 망토', d: '받는 피해 -12%', cost: 7, max: 2, lv: () => G.up.guard, buy: () => { G.up.guard++; } },
+  { n: '꿀 사탕', d: '기력 회복 +30%', cost: 5, max: 2, lv: () => G.up.stam, buy: () => { G.up.stam++; } },
+];
 function talkMerchant() {
-  G.stats.hpBuy = G.stats.hpBuy || 0;
-  if (G.stats.hpBuy >= 4) { emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 이제 더 줄 게 없어. 넌 이미 충분히 튼튼해!'] }); return; }
-  if (G.inv.dust >= 4) emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 빛가루 4개를 주면 「튼튼 물약」을 줄게. 최대 체력이 20 늘어나!'], choice: ['바꾼다 (빛가루 4)', '다음에'], pick: i => { if (i === 0) { G.inv.dust -= 4; G.me.maxHp += 20; G.me.hp = G.me.maxHp; G.stats.hpBuy++; emit('inv'); sfx.quest(); emit('toast', '최대 체력 +20'); save(); } } });
-  else emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 난 온 세상을 떠도는 상인이야. 빛나는 꽃에서 빛가루를 4개 모아 오면 「튼튼 물약」으로 바꿔 줄게.', '참, 청록빛 큰 바람꽃을 밟으면 하늘섬까지 날아오를 수 있어. 섬마다 보물 상자가 있다구!'] });
+  const left = SHOP.filter(it => it.lv() < it.max);
+  if (!left.length) { emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 이제 더 줄 게 없어. 넌 이미 충분히 튼튼해!'] }); return; }
+  emit('dialog', { who: '떠돌이 삐삐', lines: ['삐약! 난 온 세상을 떠도는 상인이야. 빛나는 꽃이나 별똥별에서 모은 빛가루를 좋은 물건으로 바꿔 줄게.', `지금 빛가루 ${G.inv.dust}개를 갖고 있네. 뭘 줄까? ` + left.map(it => `「${it.n}」 ${it.d}`).join(' · ')], choice: [...left.map(it => `${it.n} (✨${it.cost})`), '다음에'],
+    pick: i => { const it = left[i]; if (!it) return; if (G.inv.dust < it.cost) { emit('toast', `빛가루가 모자람 (${it.cost}개 필요)`); return; } G.inv.dust -= it.cost; it.buy(); emit('inv'); sfx.quest(); emit('toast', `${it.n} : ${it.d}`); G.me.ch.st.cheer = 0.8; save(); } });
+}
+/* ───── 별똥별 : 가끔 근처에 떨어지는 빛나는 돌. 먼저 주운 사람이 빛가루를 얻음 ───── */
+let starN = 0;
+export function spawnStar(x, z, id) {
+  if (W.nodes.some(n => n.id === id)) return; const y = hAt(x, z), o = clone('namaqualand_boulder_02'); o.scale.setScalar(0.75); o.position.set(x, y - 0.1, z); o.rotation.set(0.4, Math.random() * 6, 0.3);
+  o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.emissive = new THREE.Color(0xffd45a); m.material.emissiveMap = m.material.map; m.material.emissiveIntensity = 2.6; } }); G.scene.add(o);
+  W.nodes.push({ id, type: 'star', x, z, y, obj: o, ready: true, r: 3.2, born: G.time });
+  for (let k = 0; k < 6; k++) burst(x, y + 6 + k * 9, z, 14, 0xffe08a, 3, 0.6, -10, 4, 0.9); burst(x, y + 0.5, z, 60, 0xffd45a, 12, 0.6, 9, 14, 1.0); sfx.erupt && sfx.erupt();
+  if (G.me) { const dx = x - G.me.pos.x, dz = z - G.me.pos.z, d = Math.round(Math.hypot(dx, dz)), dir = (dz < -d * 0.38 ? '북' : dz > d * 0.38 ? '남' : '') + (dx > d * 0.38 ? '동' : dx < -d * 0.38 ? '서' : ''); emit('toast', `별똥별이 떨어짐! ${dir}쪽 ${d}걸음 — 먼저 줍는 사람이 임자`); G.starAt = { x, z, id }; }
+}
+function starTick() {
+  for (const n of W.nodes) if (n.type === 'star' && n.ready) { if ((G.frame % 40) === 0) burst(n.x, n.y + 1, n.z, 5, 0xffe08a, 1.5, 0.45, 16, -2, 1.6); if (G.time - n.born > 150) { n.ready = false; n.obj.visible = false; if (G.starAt && G.starAt.id === n.id) G.starAt = null; } }
+  if (G.net && !G.net.host) return; if (!G.me) return; G.starNext = G.starNext || G.time + 70; if (G.time < G.starNext) return; G.starNext = G.time + 150 + Math.random() * 90;
+  const ps = [G.me, ...G.others.values()], q = ps[Math.floor(Math.random() * ps.length)].pos;
+  for (let k = 0; k < 12; k++) { const a = Math.random() * 6.283, d = 45 + Math.random() * 70, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d; if (Math.hypot(x, z) > W.limit - 30 || hAt(x, z) < W.water + 1 || slopeAt(x, z) > 0.5 || dist2(x, z, W.arena.x, W.arena.z) < W.arena.r) continue;
+    const id = 'star' + G.region + '_' + Math.floor(G.time) + '_' + (starN++); spawnStar(+x.toFixed(1), +z.toFixed(1), id); G.net && G.net.send({ t: 'star', x: +x.toFixed(1), z: +z.toFixed(1), id }); break; }
 }
 
 /* ───── 시간에 따른 갱신 ───── */
 export function updateLife(dt) {
+  starTick();
   if (R3 && G.me && !G.me.dead) { const me = G.me, p = me.pos;
     if (dist2(p.x, p.z, W.lake.x, W.lake.z) < W.lake.r * 1.25 && p.y < W.water + 0.4) { if (me.hp < me.maxHp) me.heal(9 * dt); if (!G.stats.spa) { G.stats.spa = true; emit('toast', '온천에 몸을 담금. 다친 몸이 나음'); emit('quest'); } }
     for (const L of W.lavas) if (dist2(p.x, p.z, L.x, L.z) < L.r && p.y < L.y + 0.7 && me.inv <= 0) { if (me.damage(16, L, 6)) { me.vel.y = 13; burst(p.x, p.y + 0.5, p.z, 24, 0xff7a1a, 5, 0.5, 6); } break; } }
@@ -174,8 +199,8 @@ export function updateLife(dt) {
 
 /* ───── 저장 ───── */
 export function save() {
-  try { if (G.leaving || !G.started) return; localStorage.setItem(SAVEKEY(G.region), JSON.stringify({ inv: G.inv, weaponLv: G.weaponLv, quest: G.quest, questProg: G.questProg, stats: G.stats, maxHp: G.me ? G.me.maxHp : 100, home: G.home, builds: G.net && !G.net.host ? [] : G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })) })); } catch (e) { }
+  try { if (G.leaving || !G.started) return; localStorage.setItem(SAVEKEY(G.region), JSON.stringify({ inv: G.inv, up: G.up, weaponLv: G.weaponLv, quest: G.quest, questProg: G.questProg, stats: G.stats, maxHp: G.me ? G.me.maxHp : 100, home: G.home, builds: G.net && !G.net.host ? [] : G.builds.map(b => ({ k: b.k, x: b.x, z: b.z, ry: b.ry, state: b.state || 0 })) })); } catch (e) { }
 }
 export function load() {
-  try { const s = JSON.parse(localStorage.getItem(SAVEKEY(G.region)) || 'null'); if (!s) return false; Object.assign(G.inv, s.inv); G.weaponLv = s.weaponLv || 0; G.quest = s.quest || 0; G.questProg = s.questProg || 0; G.stats = Object.assign({ harvest: 0, mobKills: 0, bossDead: false }, s.stats); G.home = s.home || null; G._maxHp = s.maxHp; G._builds = s.builds || []; return true; } catch (e) { return false; }
+  try { const s = JSON.parse(localStorage.getItem(SAVEKEY(G.region)) || 'null'); if (!s) return false; Object.assign(G.inv, s.inv); if (s.up) Object.assign(G.up, s.up); G.weaponLv = s.weaponLv || 0; G.quest = s.quest || 0; G.questProg = s.questProg || 0; G.stats = Object.assign({ harvest: 0, mobKills: 0, bossDead: false }, s.stats); G.home = s.home || null; G._maxHp = s.maxHp; G._builds = s.builds || []; return true; } catch (e) { return false; }
 }
