@@ -3,7 +3,7 @@ import { THREE, G } from './g.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
-export const MODELS = ['jacaranda_tree', 'quiver_tree_02', 'island_tree_02', 'dead_tree_trunk_02', 'tree_stump_01', 'fern_02', 'shrub_sorrel_01', 'flower_empodium', 'dandelion_01', 'shrub_04', 'flower_gazania', 'rock_moss_set_01', 'namaqualand_boulder_02', 'rock_09', 'namaqualand_cliff_02', 'treasure_chest', 'Lantern_01', 'wooden_axe', 'food_pomegranate_01', 'planter_box_01', 'barrel_stove', 'hut'];
+export const MODELS = ['jacaranda_tree', 'quiver_tree_02', 'island_tree_02', 'dead_tree_trunk_02', 'tree_stump_01', 'fern_02', 'shrub_sorrel_01', 'flower_empodium', 'dandelion_01', 'shrub_04', 'flower_gazania', 'rock_moss_set_01', 'namaqualand_boulder_02', 'rock_09', 'namaqualand_cliff_02', 'boulder_01', 'rock_face_02', 'treasure_chest', 'Lantern_01', 'wooden_axe', 'food_pomegranate_01', 'planter_box_01', 'barrel_stove', 'hut'];
 export const CHARS = [['ssak', '새싹콩'], ['dotori', '도토리곰'], ['dorong', '도롱'], ['ppiyak', '삐약솜'], ['beoseot', '버섯동'], ['gureum', '구름양']];
 const TEX = ['leafy_grass', 'forrest_ground_01', 'cliff_side', 'coast_sand_01', 'mossy_rock'];
 

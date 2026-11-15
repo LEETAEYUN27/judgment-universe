@@ -64,6 +64,7 @@ body.mobile #prompt{bottom:190px}
 .tb{position:absolute;pointer-events:auto;border-radius:50%;background:rgba(251,243,223,.85);border:2.5px solid var(--ink);font-size:15px;display:flex;align-items:center;justify-content:center;box-shadow:2px 3px 0 rgba(40,24,12,.5)} .tb.on{transform:scale(.9);background:var(--gold)}
 #tA{right:max(22px,env(safe-area-inset-right));bottom:max(34px,env(safe-area-inset-bottom));width:84px;height:84px;font-size:18px;background:rgba(242,182,60,.92)} #tJ{right:112px;bottom:26px;width:66px;height:66px} #tD{right:38px;bottom:128px;width:66px;height:66px} #tE{right:118px;bottom:104px;width:54px;height:54px;font-size:13px} #tB{right:186px;bottom:30px;width:50px;height:50px;font-size:13px} #tF{right:22px;bottom:204px;width:50px;height:50px;font-size:13px}
 @media (max-width:640px){#quest{font-size:12px} #quest b{font-size:17px} #me{min-width:160px} #start h1{font-size:32px} #chars{grid-template-columns:repeat(3,1fr)}}
+#qDir{display:none;align-items:center;gap:8px;margin-top:6px;font-style:normal;font-family:Jua,sans-serif;font-size:15px;color:#7a4a1e}#qArrow{display:inline-block;text-decoration:none;font-size:17px;color:#e2603f;transition:transform .12s linear}
 </style>
 </head>
 <body>
@@ -83,7 +84,7 @@ body.mobile #prompt{bottom:190px}
   <div id="hurt"></div><div id="fxlayer"></div>
   <div id="me" class="sheet"><div class="nm"><b id="meName"></b><span id="meHp"></span></div><div class="bar"><i id="hpBar"></i></div><div class="bar st"><i id="stBar"></i></div></div>
   <div id="room" class="sheet">방 코드 <b id="roomCode"></b> · <span id="roomN">1</span>명</div>
-  <div id="quest" class="sheet"><b id="qTitle"></b><span id="qGoal"></span><em id="qHint"></em></div>
+  <div id="quest" class="sheet"><b id="qTitle"></b><span id="qGoal"></span><em id="qHint"></em><i id="qDir"><u id="qArrow">▲</u><span id="qDist"></span></i></div>
   <div id="boss"><b id="bossName">아귀룡</b><div class="bar"><i id="bossBar"></i></div></div>
   <div id="toasts"></div>
   <div id="prompt" class="sheet"></div>
@@ -98,6 +99,6 @@ body.mobile #prompt{bottom:190px}
 
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
-<script type="module" src="src/main.js?v=3"></script>
+<script type="module" src="src/main.js?v=4"></script>
 </body>
 </html>

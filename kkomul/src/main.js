@@ -1,7 +1,7 @@
 // 꼬물족 이야기 — 시작 · 반복 · 화면 표시
 import { THREE, G, clamp, damp, dist2, emit, on } from './g.js';
 import { loadAll, CHARS } from './assets.js';
-import { W, buildWorld, updateWorld, hAt, stepGlow } from './world.js';
+import { W, buildWorld, updateWorld, hAt, stepGlow, solidTop } from './world.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { I, initInput, consume, press } from './input.js';
 import { Player, TUNE } from './player.js';
@@ -39,7 +39,7 @@ async function boot() {
   $('#loadTxt').textContent = '분지를 일구는 중…'; await new Promise(r => setTimeout(r, 30));
   buildWorld(); spawnMonsters(); initFx(); initLife(); initInput(canvas); events();
   $('#load i').style.width = '100%'; $('#loadTxt').textContent = '준비 끝! 꼬물족을 고르고 시작'; ['#solo', '#host', '#join'].forEach(s => $(s).disabled = false);
-  window.__g = G; window.__w = W; window.__tune = TUNE; window.__I = I; window.__hAt = hAt; window.__press = press; window.__life = { tryBuild, interact, nearest, eat }; G.ready = true;
+  window.__g = G; window.__w = W; window.__tune = TUNE; window.__I = I; window.__hAt = hAt; window.__solidTop = solidTop; window.__THREE = THREE; window.__press = press; window.__life = { tryBuild, interact, nearest, eat }; G.ready = true;
   r.setAnimationLoop(loop);
   if (G.testMode) begin('solo');
 }
@@ -110,6 +110,26 @@ function events() {
 /* ───── 화면 표시 ───── */
 function toast(t) { const el = document.createElement('div'); el.className = 'toast sheet'; el.textContent = t; const box = $('#toasts'); box.appendChild(el); while (box.children.length > 3) box.firstChild.remove(); setTimeout(() => el.remove(), 3800); }
 function invUI() { const el = $('#inv'); const prev = el._v || {}; el.innerHTML = Object.keys(ITEM).map(k => `<div data-k="${k}" class="${prev[k] !== undefined && prev[k] !== G.inv[k] ? 'bump' : ''}" title="${ITEM[k][0]}">${ITEM[k][1]}<b>${G.inv[k]}</b></div>`).join('') + `<div title="도끼 단계">🪓<b>${G.weaponLv + 1}</b></div>`; el._v = Object.assign({}, G.inv); buildUI(); }
+// 퀘스트 목표 방향 · 거리
+function questTarget() {
+  const q = QUESTS[G.quest], me = G.me, chief = { x: W.spawn.x - 7, z: W.spawn.z + 3, n: '촌장' }; if (!q || !me) return null; if (G.questProg === 0 || q.check()) return chief;
+  const near = (list, n) => { let b = null, bd = 1e9; for (const o of list) { const d = dist2(me.pos.x, me.pos.z, o.x, o.z); if (d < bd) { bd = d; b = o; } } return b && { x: b.x, z: b.z, n }; };
+  const nodes = t => W.nodes.filter(n => n.type === t && n.ready);
+  switch (G.quest) {
+    case 0: return near(nodes('fruit'), '별열매');
+    case 1: return G.inv.wood < 4 ? near(nodes('wood'), '나무') : G.inv.stone < 3 ? near(nodes('stone'), '돌') : null;
+    case 3: return near(G.mobs.filter(m => m.alive).map(m => m.head), '새끼 아귀');
+    case 4: return G.inv.wood < 14 ? near(nodes('wood'), '나무') : G.inv.stone < 8 ? near(nodes('stone'), '돌') : null;
+    case 5: return { x: W.arena.x, z: W.arena.z, n: '분화구' };
+  } return null;
+}
+let qT = null;
+function questDir() {
+  if ((G.frame & 31) === 0 || !qT) qT = questTarget(); const el = $('#qDir'); if (!qT) { el.style.display = 'none'; return; }
+  const me = G.me, dx = qT.x - me.pos.x, dz = qT.z - me.pos.z, d = Math.hypot(dx, dz); if (d < 6) { el.style.display = 'none'; return; }
+  const f = G.camera.getWorldDirection(new THREE.Vector3()), a = Math.atan2(f.z * dx - f.x * dz, f.x * dx + f.z * dz);
+  el.style.display = 'flex'; $('#qArrow').style.transform = `rotate(${(-a * 57.3).toFixed(0)}deg)`; $('#qDist').textContent = `${qT.n} ${Math.round(d)}걸음`;
+}
 function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = '별꽃 분지를 지켜 냄. 다음 지역 준비 중'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? '촌장 모루와 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
 function buildUI() { const g = $('#bGrid'); if (!g) return; g.innerHTML = BUILD.map((b, i) => `<button class="it ${canAfford(b) ? '' : 'no'}" data-k="${b.k}">${i + 1}. ${b.name}<small>${b.desc}</small><b>${Object.entries(b.cost).map(([k, v]) => `${ITEM[k][1]}${v}`).join(' ')}</b></button>`).join(''); g.querySelectorAll('.it').forEach(el => el.onclick = () => { tryBuild(el.dataset.k); toggleBuild(false); }); }
 function toggleBuild(v) { const el = $('#build'), on = v === undefined ? el.style.display !== 'block' : v; if (on && dlg) return; el.style.display = on ? 'block' : 'none'; G.ui.blocked = on || !!dlg; if (on) { buildUI(); document.exitPointerLock && document.exitPointerLock(); } }
@@ -123,6 +143,7 @@ function hud() {
   const b = G.boss, show = b.alive && b.st !== 'sleep' && dist2(me.pos.x, me.pos.z, b.head.x, b.head.z) < 160; $('#boss').style.display = show ? 'block' : 'none'; if (show) $('#bossBar').style.transform = `scaleX(${b.hp / b.maxHp})`;
   const p = $('#prompt'); if (target && !G.ui.blocked) { p.style.display = 'block'; p.innerHTML = (G.mobile ? '' : '<kbd>E</kbd>') + target.label; } else p.style.display = 'none';
   if (G.questProg === 1 && (G.frame & 63) === 0) questUI();
+  questDir();
 }
 
 /* ───── 반복 ───── */

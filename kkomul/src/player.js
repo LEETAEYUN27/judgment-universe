@@ -1,7 +1,7 @@
 // 꼬물족 캐릭터 : 부위별 움직임(절차식 애니메이션) + 내 캐릭터 조작 + 카메라
 import { THREE, G, clamp, lerp, damp, dampAng, angDiff, dist2, emit } from './g.js';
 import { clone } from './assets.js';
-import { W, hAt, groundAt, nearColliders } from './world.js';
+import { W, hAt, groundAt, nearColliders, solidTop } from './world.js';
 import { I, consume, readMove } from './input.js';
 
 const V = new THREE.Vector3();
@@ -150,8 +150,12 @@ export class Player {
     }
     this.stam = Math.min(100, this.stam + T.stamRegen * dt * (this.dashT > 0 ? 0 : 1));
     // 이동 · 충돌
+    const ox = this.pos.x, oz = this.pos.z;
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt; this.pos.y += this.vel.y * dt;
-    for (const c of nearColliders(this.pos.x, this.pos.z, 12)) { const dx = this.pos.x - c.x, dz = this.pos.z - c.z, d = Math.hypot(dx, dz), rr = c.r + 0.45; if (d < rr && d > 0.001 && this.pos.y < hAt(c.x, c.z) + (c.h || 6)) { this.pos.x = c.x + dx / d * rr; this.pos.z = c.z + dz / d * rr; } }
+    for (const c of nearColliders(this.pos.x, this.pos.z, 12)) { if (c.hf || c.h < 0) continue; const dx = this.pos.x - c.x, dz = this.pos.z - c.z, d = Math.hypot(dx, dz), rr = c.r + 0.45, y0 = c.y0 === undefined ? hAt(c.x, c.z) : c.y0; if (d < rr && d > 0.001 && this.pos.y < y0 + (c.h || 6) && this.pos.y > y0 - 2) { this.pos.x = c.x + dx / d * rr; this.pos.z = c.z + dz / d * rr; } }
+    // 바위 · 그루터기 : 옆면은 막히고, 뛰어오르면 위에 설 수 있음
+    { const lim = this.pos.y + 0.14 + Math.hypot(this.pos.x - ox, this.pos.z - oz) * 1.5;
+      if (solidTop(this.pos.x, this.pos.z) > lim) { if (solidTop(this.pos.x, oz) <= lim) this.pos.z = oz; else if (solidTop(ox, this.pos.z) <= lim) this.pos.x = ox; else { this.pos.x = ox; this.pos.z = oz; } } }
     const dc = Math.hypot(this.pos.x, this.pos.z); if (dc > W.limit) { this.pos.x *= W.limit / dc; this.pos.z *= W.limit / dc; }
     let g = groundAt(this.pos.x, this.pos.z, this.pos.y); if (swim || hAt(this.pos.x, this.pos.z) < W.water - 0.55) g = Math.max(g, W.water - 0.55);
     const was = this.grounded;
@@ -175,7 +179,7 @@ export class Player {
     this.camDist = damp(this.camDist || dist, dist, 3, dt);
     V.set(this.pos.x, this.pos.y + 1.5 + (fight ? 1.2 : 0), this.pos.z); this.camTarget.lerp(V, 1 - Math.exp(-14 * dt));
     const cp = Math.cos(I.pitch), px = this.camTarget.x + Math.sin(I.yaw) * cp * this.camDist, pz = this.camTarget.z + Math.cos(I.yaw) * cp * this.camDist; let py = this.camTarget.y + Math.sin(I.pitch) * this.camDist;
-    py = Math.max(py, hAt(px, pz) + 0.7);
+    py = Math.max(py, Math.max(hAt(px, pz), solidTop(px, pz)) + 0.7);
     cam.position.set(px, py, pz);
     if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt * 1.8); const k = this.shake * this.shake * 0.9; cam.position.x += (Math.random() - 0.5) * k; cam.position.y += (Math.random() - 0.5) * k; cam.position.z += (Math.random() - 0.5) * k; }
     cam.lookAt(this.camTarget); cam.fov = damp(cam.fov, fight ? 66 : 58 + Math.min(8, Math.hypot(this.vel.x, this.vel.z) * 0.25), 4, dt); cam.updateProjectionMatrix();

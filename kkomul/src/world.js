@@ -36,10 +36,35 @@ export function hAt(x, z) {
 export function slopeAt(x, z) { const e = 2.5; return Math.hypot(hAt(x + e, z) - hAt(x - e, z), hAt(x, z + e) - hAt(x, z - e)) / (2 * e); }
 // 발 디딜 높이 : 지형 또는 떠 있는 섬 윗면 (위에서 내려올 때만 섬에 착지)
 export function groundAt(x, z, y) {
-  let g = hAt(x, z);
+  let g = Math.max(hAt(x, z), solidTop(x, z));
   for (const s of W.islands) { if (dist2(x, z, s.x, s.z) < s.r && y >= s.y - 1.2) g = Math.max(g, s.y); }
   return g;
 }
+/* ───── 단단한 물체 : 모델 윗면 높이를 격자로 구워 두고 그 위를 걷거나 옆에서 막힘 ───── */
+const HF = {};
+function hfOf(key, N = 28) {
+  if (HF[key]) return HF[key];
+  const ps = parts(key), tri = [], bb = new THREE.Box3(), v = new THREE.Vector3();
+  for (const p of ps) { const pa = p.geo.attributes.position, ix = p.geo.index, n = ix ? ix.count : pa.count;
+    for (let i = 0; i < n; i++) { v.fromBufferAttribute(pa, ix ? ix.getX(i) : i).applyMatrix4(p.m); tri.push(v.x, v.y, v.z); bb.expandByPoint(v); } }
+  const x0 = bb.min.x, z0 = bb.min.z, dx = (bb.max.x - x0) / N || 1, dz = (bb.max.z - z0) / N || 1, h = new Float32Array(N * N).fill(bb.min.y), cell = Math.min(dx, dz);
+  const put = (x, y, z) => { const i = Math.min(N - 1, Math.max(0, Math.floor((x - x0) / dx))), j = Math.min(N - 1, Math.max(0, Math.floor((z - z0) / dz))); if (y > h[j * N + i]) h[j * N + i] = y; };
+  for (let t = 0; t < tri.length; t += 9) { const ax = tri[t], ay = tri[t + 1], az = tri[t + 2], bx = tri[t + 3], by = tri[t + 4], bz = tri[t + 5], cx = tri[t + 6], cy = tri[t + 7], cz = tri[t + 8];
+    const L = Math.max(Math.hypot(bx - ax, bz - az), Math.hypot(cx - ax, cz - az), Math.hypot(cx - bx, cz - bz)), n = Math.min(40, Math.ceil(L / cell * 1.6) + 1);
+    for (let i = 0; i <= n; i++) for (let j = 0; j <= n - i; j++) { const a = i / n, b = j / n, c = 1 - a - b; put(ax * a + bx * b + cx * c, ay * a + by * b + cy * c, az * a + bz * b + cz * c); } }
+  return HF[key] = { N, x0, z0, dx, dz, h, y0: bb.min.y, y1: bb.max.y, R: Math.hypot(Math.max(-bb.min.x, bb.max.x), Math.max(-bb.min.z, bb.max.z)) };
+}
+// 물체 하나를 단단하게 등록 (it : {x,y,z,s,ry})
+export function solid(key, it, extra) { const f = hfOf(key, key === 'rock_moss_set_01' || key === 'rock_face_02' ? 48 : 28); const c = Object.assign({ hf: f, x: it.x, z: it.z, y: it.y, s: it.s, cos: Math.cos(it.ry || 0), sin: Math.sin(it.ry || 0), r: f.R * it.s, sy: it.sy || 1 }, extra); if (W.grid) addCollider(c); else W.colliders.push(c); return c; }
+function hfTop(c, x, z) {
+  const ax = (x - c.x) / c.s, az = (z - c.z) / c.s, lx = ax * c.cos - az * c.sin, lz = ax * c.sin + az * c.cos, f = c.hf, N = f.N;
+  let u = (lx - f.x0) / f.dx - 0.5, v = (lz - f.z0) / f.dz - 0.5; if (u < -0.5 || v < -0.5 || u > N - 0.5 || v > N - 0.5) return -1e9;
+  u = Math.min(N - 1.001, Math.max(0, u)); v = Math.min(N - 1.001, Math.max(0, v)); const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, k = j * N + i;
+  return c.y + ((f.h[k] * (1 - fu) + f.h[k + 1] * fu) * (1 - fv) + (f.h[k + N] * (1 - fu) + f.h[k + N + 1] * fu) * fv) * c.s * c.sy;
+}
+export function solidTop(x, z) { if (!W.grid) return -1e9; let g = -1e9; const cs = W.gcs, i0 = Math.floor((x - 14) / cs), i1 = Math.floor((x + 14) / cs), j0 = Math.floor((z - 14) / cs), j1 = Math.floor((z + 14) / cs);
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const a = W.grid.get(i + '_' + j); if (a) for (const c of a) if (c.hf && !c.off && Math.abs(x - c.x) < c.r && Math.abs(z - c.z) < c.r) { const t = hfTop(c, x, z); if (t > g) g = t; } }
+  return g; }
 
 /* ───── 지형 ───── */
 function terrain() {
@@ -174,7 +199,7 @@ function scatter(key, list, opt = {}) {      // list : [{x,y,z,s,ry}]
     for (const arr of buckets.values()) {
       const im = new THREE.InstancedMesh(p.geo, mat, arr.length);
       arr.forEach((it, i) => { E.set(it.rx || 0, it.ry || 0, it.rz || 0); Q.setFromEuler(E); S.setScalar(it.s); T.set(it.x, it.y, it.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i, M); });
-      im.castShadow = !!opt.shadow; im.receiveShadow = true; im.computeBoundingSphere(); G.scene.add(im); W.veg.push({ im, x: im.boundingSphere.center.x, z: im.boundingSphere.center.z, r: im.boundingSphere.radius, max: opt.max || 700 });
+      im.castShadow = !!opt.shadow; im.receiveShadow = true; im.userData.key = key; im.computeBoundingSphere(); G.scene.add(im); W.veg.push({ im, x: im.boundingSphere.center.x, z: im.boundingSphere.center.z, r: im.boundingSphere.radius, max: opt.max || 700 });
     }
   }
 }
@@ -187,16 +212,20 @@ function vegetation() {
   const q = G.quality;
   // 큰 나무
   const big = place(r, Math.round(70 * q), (x, z) => openGround(x, z, 20) && Math.hypot(x, z) > 45 && forest(x, z) > 0.44 ? { s: 3.0 + r() * 4.2 } : null);
-  scatter('island_tree_02', big, { shadow: true, glow: 0x1fae8f, leafOnly: true, gk: 0.5 }); big.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.9 * t.s, big: 1 }));
+  scatter('island_tree_02', big, { shadow: true, glow: 0x1fae8f, leafOnly: true, gk: 0.5 }); big.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.4 * t.s, big: 1, h: 3 * t.s }));
   const jac = place(r, Math.round(10 * q), (x, z) => openGround(x, z, 30) && Math.hypot(x, z) > 45 && forest(x, z) < 0.52 ? { s: 1.6 + r() * 1.8 } : null);
-  scatter('jacaranda_tree', jac, { shadow: true, glow: 0xb06cff, leafOnly: true, gk: 0.9 }); jac.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.7 * t.s, big: 1 }));
+  scatter('jacaranda_tree', jac, { shadow: true, glow: 0xb06cff, leafOnly: true, gk: 0.9 }); jac.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 1.25 * t.s, big: 1, h: 12 * t.s }));
   const qv = place(r, Math.round(150 * q), (x, z) => openGround(x, z, 10) && Math.hypot(x, z) > 30 ? { s: 1.4 + r() * 2.6 } : null);
-  scatter('quiver_tree_02', qv, { shadow: true }); qv.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.45 * t.s }));
+  scatter('quiver_tree_02', qv, { shadow: true }); qv.forEach(t => W.colliders.push({ x: t.x, z: t.z, r: 0.2 * t.s, h: 1.3 * t.s }));
   // 바위
-  const bo = place(r, Math.round(120 * q), (x, z) => hAt(x, z) > W.water - 1 && Math.hypot(x, z) > 30 && dist2(x, z, W.arena.x, W.arena.z) > 40 ? { s: 1.5 + Math.pow(r(), 3) * 9, rx: r() * 0.4, rz: r() * 0.4 } : null);
+  const bo = place(r, Math.round(120 * q), (x, z) => hAt(x, z) > W.water - 1 && Math.hypot(x, z) > 30 && dist2(x, z, W.arena.x, W.arena.z) > 40 ? { s: 1.5 + Math.pow(r(), 3) * 9 } : null); bo.forEach(t => { t.y -= 0.12 * t.s; });
   scatter('namaqualand_boulder_02', bo, { shadow: true, max: 620 });
-  bo.forEach(t => { if (t.s > 2.5) W.colliders.push({ x: t.x, z: t.z, r: 0.55 * t.s, big: t.s > 4 ? 1 : 0 }); t.y -= 0.25 * t.s; });
-  const rk = place(r, Math.round(160 * q), (x, z) => hAt(x, z) > W.water - 2 ? { s: 0.8 + r() * 2.2 } : null); scatter('rock_moss_set_01', rk, { max: 260 });
+  bo.forEach(t => { solid('namaqualand_boulder_02', t); if (t.s > 4) W.colliders.push({ x: t.x, z: t.z, r: 0.9 * t.s, big: 1, h: -1 }); });
+  const rk = place(r, Math.round(160 * q), (x, z) => hAt(x, z) > W.water - 2 ? { s: 0.8 + r() * 2.2 } : null); scatter('rock_moss_set_01', rk, { max: 260 }); rk.forEach(t => solid('rock_moss_set_01', t));
+  // 바위 기둥 : 몇 곳에 무리 지어 솟음
+  const pil = []; for (let k = 0; k < Math.round(9 * Math.max(0.5, q)); k++) { let cx, cz, gd = 0; do { cx = (r() * 2 - 1) * 560; cz = (r() * 2 - 1) * 560; } while (gd++ < 40 && !(openGround(cx, cz, 60) && Math.hypot(cx, cz) > 110));
+    if (gd > 40) continue; const n = 3 + Math.floor(r() * 4); for (let i = 0; i < n; i++) { const a = r() * 6.283, d = i ? 6 + r() * 22 : 0, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; if (hAt(x, z) < W.water + 0.5) continue; const sc = i ? 2.2 + r() * 3.5 : 5 + r() * 4; pil.push({ x, z, y: hAt(x, z) - 0.25 * sc, s: sc, ry: r() * 6.283 }); } }
+  scatter('rock_face_02', pil, { shadow: true, max: 900 }); pil.forEach(t => { solid('rock_face_02', t); W.colliders.push({ x: t.x, z: t.z, r: 1.0 * t.s, big: 1, h: -1 }); }); W.pillars = pil;
   // 풀 · 꽃 (밤에 빛남)
   const low = (key, n, s0, s1, glow, f) => scatter(key, place(r, Math.round(n * q), (x, z) => openGround(x, z) && (!f || f(x, z)) ? { s: s0 + r() * (s1 - s0) } : null), { glow, max: 170 });
   low('fern_02', 2600, 1.2, 2.8, 0x1ad6a0, (x, z) => forest(x, z) > 0.44);
@@ -223,7 +252,7 @@ function islands() {
     }
     // 윗면 : 납작하게 누른 큰 바위 + 풀 재질
     for (const p of top) { const m = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({ map: G.assets.t_leafy_grass, normalMap: G.assets.n_leafy_grass, color: 0xb8f0c8, roughness: 0.95 })); m.material.map.repeat.set(1, 1); m.applyMatrix4(p.m); const h = new THREE.Group(); h.add(m); const s = rad * 2.1 / Math.max(tb.size.x, tb.size.z); h.scale.set(s, s * 0.16, s); h.position.y = -tb.size.y * s * 0.16 * 0.42; g.add(h); m.receiveShadow = true; }
-    const tree = clone('island_tree_02'); tree.scale.setScalar(2.2 + r() * 1.5); tree.position.set(rad * 0.25, 0, -rad * 0.2); g.add(tree);
+    const ts = 2.2 + r() * 1.5, tree = clone('island_tree_02'); tree.scale.setScalar(ts); W.colliders.push({ x: x + rad * 0.25, z: z - rad * 0.2, r: 0.4 * ts, y0: y, h: 3 * ts }, { x: x - rad * 0.3, z: z + rad * 0.15, r: 0.9, y0: y, h: 1.2 }); tree.position.set(rad * 0.25, 0, -rad * 0.2); g.add(tree);
     const chest = clone('treasure_chest'); chest.scale.setScalar(1.6); chest.position.set(-rad * 0.3, 0, rad * 0.15); chest.rotation.y = r() * 6; g.add(chest);
     W.nodes.push({ id: 'chest' + W.islands.length, type: 'chest', x: x - rad * 0.3, z: z + rad * 0.15, y, obj: chest, ready: true, r: 3.2 });
     G.scene.add(g); isl.group = g;
@@ -246,11 +275,11 @@ function resources() {
     for (let i = 0, guard = 0; i < n && guard < n * 60; guard++) {
       const rad = i < near ? 40 + r() * 150 : 180 + r() * 470, a = r() * 6.283, x = Math.cos(a) * rad, z = Math.sin(a) * rad;
       if (!openGround(x, z, 15) || (rule && !rule(x, z))) continue;
-      const obj = clone(key), s = s0 + r() * (s1 - s0); obj.scale.setScalar(s); obj.position.set(x, hAt(x, z), z); obj.rotation.y = r() * 6.28;
+      const obj = clone(key), s = s0 + r() * (s1 - s0); obj.scale.setScalar(s); const ry = r() * 6.28; obj.position.set(x, hAt(x, z), z); obj.rotation.y = ry;
       obj.traverse(o => { if (o.isMesh) { o.castShadow = true; if (o.material.alphaTest === 0 && o.material.transparent) { o.material = o.material.clone(); o.material.transparent = false; o.material.alphaTest = 0.45; o.material.side = THREE.DoubleSide; } } });
       const node = { id: type + (id++), type, x, z, y: obj.position.y, obj, ready: true, r: type === 'wood' ? 2.4 : 2.0, hp: 3, s };
       if (deco) deco(node, obj, s); G.scene.add(obj); W.nodes.push(node); i++;
-      if (type === 'wood' || type === 'stone') W.colliders.push({ x, z, r: (type === 'wood' ? 0.55 : 0.75) * s, node });
+      if (type === 'wood' || type === 'stone') solid(key, { x, z, y: obj.position.y, s, ry }, { node });
     }
   };
   add('fruit', 'shrub_04', 46, 2.6, 3.4, null, (node, obj, s) => {
@@ -258,7 +287,7 @@ function resources() {
       f.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xff3b6b); o.material.emissiveIntensity = 0.9; } }); obj.add(f); node.fruits.push(f); }
   });
   add('wood', 'tree_stump_01', 30, 1.6, 2.4); add('wood', 'dead_tree_trunk_02', 26, 1.3, 2.0);
-  add('stone', 'rock_09', 44, 1.4, 2.4);
+  add('stone', 'boulder_01', 44, 1.1, 1.6);
   add('dust', 'flower_gazania', 50, 3.0, 4.2, null, (node, obj) => { obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0xffc44a); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 1.5; o.material.alphaTest = 0.4; o.material.side = THREE.DoubleSide; } }); });
 }
 
@@ -332,7 +361,7 @@ function giants() {
   const r = rng(808), spots = [[-58, -74, 13], [150, 60, 11], [-170, 170, 15], [40, -330, 12], [-250, -120, 14], [360, 330, 12], [-420, 250, 13]], b = bounds('island_tree_02'), pos = [], seed = [];
   const list = spots.filter(([x, z]) => hAt(x, z) > W.water + 1).map(([x, z, s]) => ({ x, z, y: hAt(x, z) - 0.5, s, ry: r() * 6.28 }));
   scatter('island_tree_02', list, { shadow: true, glow: 0x35e0c0, leafOnly: true, gk: 0.9, max: 1400 });
-  for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 1.1 * t.s, big: 1, h: 60 });
+  for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 0.42 * t.s, big: 1, h: 60 });
     const R = b.size.x * 0.42 * t.s, top = b.size.y * t.s;
     for (let k = 0; k < 90; k++) { const a = r() * 6.283, rr = Math.sqrt(r()) * R, ax = t.x + Math.cos(a) * rr, az = t.z + Math.sin(a) * rr, ay = t.y + top * (0.5 + r() * 0.3), len = 5 + r() * (top * 0.38), n = 9 + Math.floor(len * 0.9), sd = r();
       for (let i = 0; i < n; i++) { pos.push(ax, ay - (i / n) * len, az); seed.push(sd, i / n, len); } } }
@@ -348,6 +377,21 @@ function giants() {
   for (const p of parts('namaqualand_cliff_02')) { const mm = p.mat.clone(); mm.side = THREE.DoubleSide; mm.envMapIntensity = 0.4; const im = new THREE.InstancedMesh(p.geo, mm, far.length * 2); const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Euler();
     far.forEach((f, i) => { for (let u = 0; u < 2; u++) { E.set(0, f.ry + u * 2.1, 0); Q.setFromEuler(E); const s = k0 * f.s; S.set(s * (u ? 0.8 : 1), s * (u ? 0.7 : -1.7), s * (u ? 0.8 : 1)); T.set(f.x, f.y + (u ? 0 : -2), f.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i * 2 + u, M); } });
     im.frustumCulled = false; G.scene.add(im); }
+}
+
+/* ───── 하늘섬 폭포 : 섬 가장자리에서 땅까지 떨어지는 빛 물줄기 ───── */
+function falls() {
+  const r = rng(909), pos = [], sd = [];
+  for (const s of W.islands) for (let f = 0; f < 2; f++) { const a = r() * 6.283, ex = s.x + Math.cos(a) * s.r * 0.98, ez = s.z + Math.sin(a) * s.r * 0.98, drop = s.y - Math.max(hAt(ex, ez), W.water), n = Math.round(drop * 16 * Math.max(0.4, G.quality)), wd = 1.6 + r() * 1.6;
+    for (let i = 0; i < n; i++) { const t = (r() - 0.5) * wd; pos.push(ex - Math.sin(a) * t, s.y - 0.3, ez + Math.cos(a) * t); sd.push(r(), drop, 0); }
+    W.fallSpots = W.fallSpots || []; W.fallSpots.push({ x: ex + Math.cos(a) * 1.5, z: ez + Math.sin(a) * 1.5, y: Math.max(hAt(ex, ez), W.water) }); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aS', new THREE.Float32BufferAttribute(sd, 3));
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uTime: W.uniforms.uTime, uNight: W.uniforms.uNight },
+    vertexShader: `attribute vec3 aS; uniform float uTime; varying float vA; void main(){ float T = sqrt(2.0 * aS.y / 9.0) + 0.6; float t = mod(uTime + aS.x * T, T); float fall = min(aS.y, 4.5 * t * t); vec3 p = position; float k = fall / aS.y; float sp = fract(aS.x * 91.7) - 0.5;
+      p.y -= fall; p.x += sp * k * 3.0 + sin(uTime * 0.6 + aS.x * 30.0) * k * 0.8; p.z += (fract(aS.x * 57.3) - 0.5) * k * 3.0; float splash = step(aS.y - 0.01, fall); p.y += splash * fract(aS.x * 13.1) * 2.2 * sin(min(3.14, (t - sqrt(aS.y / 4.5)) * 5.0)); p.x += splash * sp * 5.0; 
+      vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; vA = (0.25 + 0.75 * fract(aS.x * 7.3)) * smoothstep(0.0, 0.04, k) * mix(1.0, 0.55, splash); gl_PointSize = clamp(mix(60.0, 150.0, k) / -mv.z, 1.0, 14.0); }`,
+    fragmentShader: `varying float vA; uniform float uNight; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, d); gl_FragColor = vec4(mix(vec3(0.55, 0.8, 1.0), vec3(0.45, 1.0, 0.92), uNight) * a * vA * 0.9, a * vA * 0.6); }` });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; G.scene.add(pts);
 }
 
 /* ───── 충돌 격자 ───── */
@@ -377,5 +421,5 @@ export function updateWorld(dt, focus) {
 }
 
 export function buildWorld() {
-  buildHeight(); lights(); sky(); terrain(); water(); islands(); vegetation(); giants(); resources(); grass(); motes(); buildGrid();
+  buildHeight(); lights(); sky(); terrain(); water(); islands(); falls(); vegetation(); giants(); resources(); grass(); motes(); buildGrid();
 }

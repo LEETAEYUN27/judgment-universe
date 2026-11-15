@@ -1,6 +1,6 @@
 # 소재 출처 · 라이선스
 - what: 나무 · 풀 · 꽃 · 바위 · 소품 모델 24종 (assets/models/*.glb, hut 제외)
-  source: https://polyhaven.com/models  (jacaranda_tree, quiver_tree_02, island_tree_02, dead_tree_trunk_02, tree_stump_01, fern_02, shrub_sorrel_01, anthurium_botany_01, calathea_orbifolia_01, flower_empodium, dandelion_01, shrub_04, flower_gazania, rock_moss_set_01, namaqualand_boulder_02, rock_09, namaqualand_cliff_02, treasure_chest, Lantern_01, wooden_axe, food_pomegranate_01, planter_box_01, barrel_stove)
+  source: https://polyhaven.com/models  (jacaranda_tree, quiver_tree_02, island_tree_02, dead_tree_trunk_02, tree_stump_01, fern_02, shrub_sorrel_01, anthurium_botany_01, calathea_orbifolia_01, flower_empodium, dandelion_01, shrub_04, flower_gazania, rock_moss_set_01, namaqualand_boulder_02, rock_09, namaqualand_cliff_02, boulder_01, rock_face_02, treasure_chest, Lantern_01, wooden_axe, food_pomegranate_01, planter_box_01, barrel_stove)
   license: CC0
   note: gltf-transform 로 다각형 수 · 질감 크기를 줄여 사용
 - what: 지형 · 건물 · 괴물 표면 질감 (assets/tex/*, 오두막 · 아귀룡 안에 포함된 질감)
