@@ -1,7 +1,8 @@
 // 꼬물족 이야기 — 시작 · 반복 · 화면 표시
 import { THREE, G, clamp, damp, dist2, emit, on } from './g.js';
 import { loadAll, CHARS } from './assets.js';
-import { W, buildWorld, updateWorld, hAt } from './world.js';
+import { W, buildWorld, updateWorld, hAt, stepGlow } from './world.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { I, initInput, consume, press } from './input.js';
 import { Player, TUNE } from './player.js';
 import { spawnMonsters } from './boss.js';
@@ -14,6 +15,11 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const $ = s => document.querySelector(s);
+// 색 보정 : 어두운 곳은 청록, 밝은 곳은 자줏빛으로 살짝 기울이고 가장자리를 어둡게
+const GRADE = { uniforms: { tDiffuse: { value: null } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(c, c * vec3(0.80, 1.04, 1.16), smoothstep(0.5, 0.0, l) * 0.6); c = mix(c, c * vec3(1.10, 0.97, 1.08), smoothstep(0.5, 1.0, l) * 0.5);
+    c = mix(vec3(l), c, 1.22); c = (c - 0.5) * 1.08 + 0.5; vec2 q = vUv - 0.5; c *= 1.0 - dot(q, q) * 0.75; gl_FragColor = vec4(max(c, 0.0), 1.0); }` };
 const canvas = $('#c'); let hitstop = 0, lastSave = 0, kind = CHARS[0][0], target = null, bossSeen = false;
 G.ui = { blocked: false }; G.frame = 0; G.norender = new URLSearchParams(location.search).has('norender');
 G.worldTime = () => W.uniforms.uTime.value; G.setWorldTime = t => { W.uniforms.uTime.value = t; };
@@ -26,7 +32,7 @@ async function boot() {
   const r = new THREE.WebGLRenderer({ canvas, antialias: !G.mobile, powerPreference: 'high-performance' }); G.renderer = r;
   const lite = new URLSearchParams(location.search).has('lite'); G.lite = lite; r.setPixelRatio(lite ? 0.6 : Math.min(devicePixelRatio, G.mobile ? 1.25 : 1.5)); r.setSize(innerWidth, innerHeight); r.shadowMap.enabled = !lite; r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.2;
   G.scene = new THREE.Scene(); G.camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, 2400);
-  const comp = new EffectComposer(r); comp.addPass(new RenderPass(G.scene, G.camera)); const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.7, 0.9); comp.addPass(bloom); comp.addPass(new OutputPass()); G.composer = comp;
+  const comp = new EffectComposer(r); comp.addPass(new RenderPass(G.scene, G.camera)); const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.7, 0.86); comp.addPass(bloom); comp.addPass(new ShaderPass(GRADE)); comp.addPass(new OutputPass()); G.composer = comp;
   addEventListener('resize', () => { r.setSize(innerWidth, innerHeight); comp.setSize(innerWidth, innerHeight); G.camera.aspect = innerWidth / innerHeight; G.camera.updateProjectionMatrix(); });
   startUI();
   await loadAll(p => { $('#load i').style.width = Math.round(p * 86) + '%'; });
@@ -57,8 +63,9 @@ async function begin(mode) {
   if (G.home) G.me.respawn(), G.me.inv = 0;
   if (G.stats.bossDead && mode !== 'join') { G.boss.alive = false; G.boss.deadT = 99; G.boss.group.visible = false; }
   $('#start').style.display = 'none'; $('#hud').classList.add('on'); $('#meName').textContent = name; G.paused = false; G.started = true;
-  I.yaw = 0.6; invUI(); questUI(); buildUI();
+  I.yaw = 0.6; I.pitch = 0.16; invUI(); questUI(); buildUI();
   if (!had || G.quest === 0) setTimeout(() => toast('촌장 「모루」에게 가서 말을 걸어 보자 (E)'), 1200);
+  setTimeout(() => toast(G.mobile ? '화면 빈 곳을 끌면 시선이 돌아감' : '화면을 클릭하면 마우스로 시선 회전 (Esc 로 풀기) · 클릭한 채 끌기나 방향키 ← → ↑ ↓ 도 가능'), 4500);
 }
 
 /* ───── 사건 ───── */
@@ -92,7 +99,7 @@ function events() {
   on('hurt', () => { sfx.hurt(); const h = $('#hurt'); h.style.opacity = 1; setTimeout(() => h.style.opacity = 0, 180); });
   on('died', () => { sfx.die(); $('#dead').style.display = 'flex'; }); on('respawn', () => { $('#dead').style.display = 'none'; });
   on('jump', () => sfx.jump()); on('jump2', p => { sfx.jump2(); burst(p.x, p.y, p.z, 10, 0xbfffe8, 3, 0.4, 0, 0, 0.4); }); on('dash', p => { sfx.dash(); burst(p.x, p.y + 0.5, p.z, 12, 0xe8fff8, 4, 0.5, 1, 0, 0.35); });
-  on('land', e => { sfx.land(); burst(e.pos.x, e.pos.y + 0.1, e.pos.z, Math.min(16, 4 + e.v), 0xc8c0a0, 3, 0.45, 1.5, 6, 0.5); }); on('step', () => sfx.step()); on('pad', p => { sfx.pad(); burst(p.x, p.y + 1, p.z, 50, 0x35ffd0, 9, 0.6, 14, 4, 1.1); toast('바람꽃을 타고 날아오름!'); });
+  on('land', e => { stepGlow(e.pos.x, e.pos.z); sfx.land(); burst(e.pos.x, e.pos.y + 0.1, e.pos.z, Math.min(16, 4 + e.v), 0xc8c0a0, 3, 0.45, 1.5, 6, 0.5); }); on('step', p => { sfx.step(); stepGlow(p.x, p.z); }); on('pad', p => { sfx.pad(); burst(p.x, p.y + 1, p.z, 50, 0x35ffd0, 9, 0.6, 14, 4, 1.1); toast('바람꽃을 타고 날아오름!'); });
   on('hitstop', t => { hitstop = Math.max(hitstop, t); }); on('toast', toast); on('inv', invUI); on('quest', questUI); on('roster', () => { const n = G.net ? G.net.count : 1; $('#roomN').textContent = n; if (isHost() && G.boss.alive) { const b = G.boss, base = 2600, nm = Math.round(base * (1 + 0.6 * (n - 1))); b.hp = Math.round(b.hp / b.maxHp * nm); b.maxHp = nm; } });
   on('dialog', openDialog);
   $('#bClose').onclick = () => toggleBuild(false);
@@ -133,7 +140,17 @@ function tick(dt, now) {
   if (now - lastSave > 20000) { lastSave = now; save(); }
 }
 G.sim = (dt, n) => { for (let i = 0; i < n; i++) tick(dt, 0); hud(); };      // 자동 점검용 : 화면을 그리지 않고 시간만 진행
+let perfT = 0, perfN = 0, perfLv = 0;
+function perf(raw) {      // 느린 기기 : 처음 몇 초의 프레임을 재서 풀 수 · 해상도 · 그림자를 단계적으로 낮춤
+  if (!G.started || G.testMode || perfLv >= 3) return; perfT += raw; perfN++;
+  if (perfT < 4) return; const fps = perfN / perfT; perfT = 0; perfN = 0;
+  if (fps >= 33) { if (fps > 50) perfLv = 9; return; } perfLv++;
+  if (perfLv === 1) { W.grassMesh.geometry.instanceCount = Math.round(W.grassN * 0.5); G.renderer.setPixelRatio(1); G.composer.setPixelRatio && G.composer.setPixelRatio(1); }
+  if (perfLv === 2) { W.grassMesh.geometry.instanceCount = Math.round(W.grassN * 0.25); G.renderer.shadowMap.enabled = false; G.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
+  if (perfLv === 3) { G.lite = true; G.renderer.setPixelRatio(0.8); toast('기기 성능에 맞춰 그래픽을 낮춤'); }
+}
 function loop(now) {
+  const raw = (now - last) / 1000; perf(raw);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (hitstop > 0) { hitstop -= dt; dt *= 0.08; }
   if (G.started && G.me) { if (!G.hold) { tick(dt, now); hud(); } }

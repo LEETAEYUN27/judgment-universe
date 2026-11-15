@@ -12,7 +12,7 @@ export class Char {
     this.model.traverse(o => {
       if (/^(body|head|armL|armR|legL|legR)$/.test(o.name)) this.n[o.name] = o;
       if (/^(extra|tail)\d/.test(o.name) && !o.isMesh) this.extras.push({ o, a: Math.random() * 6, v: 0, r: 0 });
-      if (o.isMesh) { o.castShadow = true; if (/^eye|^shine/.test(o.name)) this.eyes.push(o); o.material = o.material.clone(); o.material.envMapIntensity = 0.25; if (!/^eye|^shine/.test(o.name)) o.material.color.multiplyScalar(0.86); this.mats.push(o.material); }
+      if (o.isMesh) { o.castShadow = true; if (/^eye|^shine/.test(o.name)) this.eyes.push(o); o.material = o.material.clone(); o.material.envMapIntensity = 0.25; if (!/^eye|^shine/.test(o.name)) o.material.color.multiplyScalar(0.74); this.mats.push(o.material); }
     });
     this.rest = {}; for (const k in this.n) this.rest[k] = { p: this.n[k].position.clone(), r: this.n[k].rotation.clone() };
     this.phase = Math.random() * 6; this.squash = 0; this.squashV = 0; this.blink = 2 + Math.random() * 3; this.t = Math.random() * 10; this.flash = 0;
@@ -32,7 +32,7 @@ export class Char {
   setName(name) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '700 30px Jua, "Noto Sans KR", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = 7; g.strokeStyle = 'rgba(20,24,40,.85)'; g.strokeText(name, 128, 34); g.fillStyle = '#fff8e8'; g.fillText(name, 128, 34);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, transparent: true })); sp.scale.set(2.4, 0.6, 1); sp.position.y = 1.9 * this.scale / 1.25 + 0.2; this.root.add(sp); this.tag = sp;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, transparent: true, color: 0xb0b0b0, toneMapped: false })); sp.scale.set(2.4, 0.6, 1); sp.position.y = 1.9 * this.scale / 1.25 + 0.2; this.root.add(sp); this.tag = sp;
   }
   land(v) { this.squashV -= clamp(v * 0.09, 0.4, 2.2); }
   hit() { this.flash = 1; this.st.hurt = 0.35; }

@@ -5,7 +5,7 @@ import { parts, clone, bounds } from './assets.js';
 export const W = {
   size: 1500, res: 300, half: 750, limit: 690, water: 0,
   spawn: { x: 0, z: 0 }, lake: { x: 250, z: 240, r: 125 }, arena: { x: -360, z: -330, r: 105 },
-  islands: [], pads: [], colliders: [], nodes: [], grid: null, cell: 0, hmap: null, uniforms: { uTime: { value: 0 }, uNight: { value: 1 } },
+  islands: [], pads: [], colliders: [], nodes: [], grid: null, cell: 0, hmap: null, uniforms: { uTime: { value: 0 }, uNight: { value: 1 }, uSteps: { value: Array.from({ length: 16 }, () => new THREE.Vector3(0, 0, -99)) }, uP: { value: new THREE.Vector3() } }, stepI: 0,
 };
 
 /* ───── 높이 함수 ───── */
@@ -54,19 +54,19 @@ function terrain() {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
   const A = G.assets, mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, normalMap: A.n_leafy_grass, normalScale: new THREE.Vector2(0.7, 0.7) });
   mat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, { tGrass: { value: A.t_leafy_grass }, tForest: { value: A.t_forrest_ground_01 }, tRock: { value: A.t_cliff_side }, tSand: { value: A.t_coast_sand_01 }, uTime: W.uniforms.uTime, uNight: W.uniforms.uNight });
+    Object.assign(sh.uniforms, { tGrass: { value: A.t_leafy_grass }, tForest: { value: A.t_forrest_ground_01 }, tRock: { value: A.t_cliff_side }, tSand: { value: A.t_coast_sand_01 }, uTime: W.uniforms.uTime, uNight: W.uniforms.uNight, uSteps: W.uniforms.uSteps });
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp; varying vec3 vWn;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz; vWn = normalize(mat3(modelMatrix) * objectNormal);')
       .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_NORMALMAP\n vNormalMapUv = position.xz * 0.11;\n#endif');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp; varying vec3 vWn; uniform sampler2D tGrass, tForest, tRock, tSand; uniform float uTime, uNight;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp; varying vec3 vWn; uniform sampler2D tGrass, tForest, tRock, tSand; uniform float uTime, uNight; uniform vec3 uSteps[16];')
       .replace('#include <color_fragment>', `
         vec2 q = vWp.xz;
-        vec3 cg = mix(texture2D(tGrass, q * 0.16).rgb, texture2D(tGrass, q * 0.023).rgb, 0.4) * vec3(0.55, 1.05, 0.9) * 1.1;
+        vec3 cg = mix(texture2D(tGrass, q * 0.16).rgb, texture2D(tGrass, q * 0.023).rgb, 0.4) * vec3(0.30, 0.62, 0.55) * 0.9;
         vec3 cf = mix(texture2D(tForest, q * 0.10).rgb, texture2D(tForest, q * 0.017).rgb, 0.4);
         vec3 cr = mix(texture2D(tRock, q * 0.031).rgb, texture2D(tRock, vWp.zy * 0.017 + q.x * 0.011).rgb, 0.5) * vec3(0.62, 0.72, 0.9);
         vec3 cs = texture2D(tSand, q * 0.09).rgb;
         float slope = 1.0 - vWn.y;
-        vec3 c = mix(cg, cf, vColor.r);
+        vec3 c = mix(cg, cf * vec3(0.6, 0.75, 0.8), vColor.r);
         c = mix(c, cs, smoothstep(2.2, 0.4, vWp.y));
         c = mix(c, cr, smoothstep(0.30, 0.52, slope));
         c = mix(c, cr * vec3(0.55, 0.42, 0.40), vColor.b * 0.85);
@@ -74,7 +74,10 @@ function terrain() {
         diffuseColor.rgb = c;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float gl = vColor.g * (1.0 - smoothstep(0.25, 0.45, 1.0 - vWn.y)) * (0.55 + 0.45 * sin(uTime * 0.8 + vWp.x * 0.07 + vWp.z * 0.05));
-        totalEmissiveRadiance += vec3(0.05, 0.75, 0.62) * gl * 1.3 * uNight;`);
+        float vein = smoothstep(0.52, 0.5, abs(fract(vWp.x * 0.05 + sin(vWp.z * 0.07) * 0.8) - 0.5)) * 0.0;
+        totalEmissiveRadiance += vec3(0.05, 0.75, 0.62) * gl * 1.5 * uNight;
+        float sg = 0.0; for (int i = 0; i < 16; i++) { float age = uTime - uSteps[i].z; if (age > 0.0 && age < 5.0) { float sd = distance(vWp.xz, uSteps[i].xy); sg += (smoothstep(1.3, 0.0, sd) * 0.9 + smoothstep(0.5, 0.0, abs(sd - age * 2.6)) * 0.7) * exp(-age * 1.0); } }
+        totalEmissiveRadiance += vec3(0.15, 0.95, 0.85) * sg * 0.9 * (1.0 - smoothstep(0.3, 0.5, 1.0 - vWn.y));`);
   };
   const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = true; mesh.name = 'terrain'; G.scene.add(mesh);
 }
@@ -103,14 +106,31 @@ function sky() {
         float vis = mix(0.12, 1.0, uNight) * smoothstep(-0.02, 0.2, d.y);
         c += (max(mwc, 0.0) * 0.55 + vec3(0.9, 0.95, 1.0) * st * 1.6) * vis;
         // 달 둘
-        vec3 m1 = normalize(vec3(-0.45, 0.52, -0.72)); float a1 = dot(d, m1); c += vec3(0.95, 0.97, 1.0) * smoothstep(0.9965, 0.9975, a1) * (0.75 + 0.25 * fb(d.xy * 60.0)) + vec3(0.5, 0.65, 1.0) * pow(max(a1, 0.0), 180.0) * 0.5;
+        // 거대한 가스 행성과 고리
+        vec3 pd = normalize(vec3(-0.50, 0.40, -0.76)); vec3 pr = normalize(cross(vec3(0.15, 1.0, 0.1), pd)); vec3 pu = cross(pd, pr); float PR = 0.21;
+        vec2 pq = vec2(dot(d, pr), dot(d, pu)) / PR; float pl = length(pq);
+        if (dot(d, pd) > 0.0) {
+          vec2 rq = vec2(pq.x * 0.96 + pq.y * 0.28, (pq.y * 0.96 - pq.x * 0.28) * 3.6); float rl = length(rq);
+          float ringA = smoothstep(1.32, 1.4, rl) * smoothstep(2.25, 2.1, rl) * (0.55 + 0.45 * sin(rl * 46.0)) * (0.6 + 0.4 * sin(rl * 13.0));
+          bool behind = (pq.y * 0.96 - pq.x * 0.28) > 0.0 && pl < 1.0;
+          if (pl < 1.0) {
+            float zz = sqrt(1.0 - pl * pl); vec3 nn = vec3(pq, zz); float lit = clamp(dot(nn, normalize(vec3(0.75, 0.35, 0.45))) * 1.25 + 0.12, 0.0, 1.0);
+            float band = fb(vec2(pq.x * 1.5 + fb(pq * 3.0) * 0.6 + uTime * 0.004, pq.y * 9.0));
+            vec3 pc = mix(vec3(0.10, 0.34, 0.62), vec3(0.50, 0.80, 0.92), band); pc = mix(pc, vec3(0.80, 0.55, 0.85), smoothstep(0.62, 0.8, fb(vec2(pq.x * 2.0, pq.y * 14.0 + 4.0))) * 0.6);
+            pc *= lit * (0.55 + 0.45 * zz); pc += vec3(0.25, 0.55, 0.9) * pow(1.0 - zz, 3.0) * 0.5 * lit;
+            c = mix(c, pc * mix(0.55, 1.0, uNight), smoothstep(1.0, 0.985, pl));
+          }
+          if (!behind) c += vec3(0.75, 0.86, 1.0) * ringA * 0.45 * mix(0.4, 1.0, uNight);
+          c += vec3(0.18, 0.45, 0.8) * smoothstep(1.5, 1.0, pl) * (1.0 - smoothstep(0.98, 1.0, 1.0 - pl + 0.98)) * 0.0 + vec3(0.12, 0.35, 0.7) * exp(-max(pl - 1.0, 0.0) * 5.0) * 0.35 * step(1.0, pl);
+        }
+        vec3 m1 = normalize(vec3(0.30, 0.62, 0.42)); float a1 = dot(d, m1); c += vec3(0.95, 0.97, 1.0) * smoothstep(0.9982, 0.9987, a1) * (0.75 + 0.25 * fb(d.xy * 60.0)) + vec3(0.5, 0.65, 1.0) * pow(max(a1, 0.0), 180.0) * 0.5;
         vec3 m2 = normalize(vec3(0.62, 0.33, 0.70)); float a2 = dot(d, m2); c += vec3(1.0, 0.62, 0.72) * smoothstep(0.9990, 0.9994, a2) + vec3(1.0, 0.4, 0.6) * pow(max(a2, 0.0), 400.0) * 0.4;
         // 오로라 장막
         float az = atan(d.z, d.x); float wav = sin(az * 3.0 + uTime * 0.12) * 0.12 + sin(az * 7.0 - uTime * 0.2) * 0.05;
         float cur = smoothstep(0.0, 0.25, d.y - 0.16 - wav) * smoothstep(0.62, 0.22, d.y - wav);
         float ray = 0.55 + 0.45 * n2(vec2(az * 26.0 + uTime * 0.25, 1.0));
         c += mix(vec3(0.1, 1.0, 0.65), vec3(0.6, 0.3, 1.0), smoothstep(0.2, 0.6, d.y)) * cur * ray * 0.34 * mix(0.25, 1.0, uNight) * (0.6 + 0.4 * sin(az * 2.0 + uTime * 0.07));
-        gl_FragColor = vec4(c * mix(1.0, 0.6, uNight), 1.0);
+        gl_FragColor = vec4(c * mix(1.0, 0.72, uNight), 1.0);
       }`,
   });
   const m = new THREE.Mesh(new THREE.SphereGeometry(1800, 48, 24), mat); m.name = 'sky'; m.frustumCulled = false; m.renderOrder = -10; G.scene.add(m); W.skyMesh = m;
@@ -244,16 +264,90 @@ function resources() {
 
 /* ───── 반딧불이 · 빛 포자 ───── */
 function motes() {
-  const n = Math.round(1400 * G.quality), pos = new Float32Array(n * 3), seed = new Float32Array(n), r = rng(9);
+  const n = Math.round(2600 * G.quality), pos = new Float32Array(n * 3), seed = new Float32Array(n), r = rng(9);
   for (let i = 0; i < n; i++) { const x = (r() * 2 - 1) * W.limit, z = (r() * 2 - 1) * W.limit; pos[i * 3] = x; pos[i * 3 + 1] = hAt(x, z) + 0.6 + r() * 7; pos[i * 3 + 2] = z; seed[i] = r(); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uTime: W.uniforms.uTime, uNight: W.uniforms.uNight },
     vertexShader: `attribute float aSeed; uniform float uTime; varying float vS; void main(){ vS = aSeed; vec3 p = position; p.x += sin(uTime * (0.3 + aSeed) + aSeed * 50.0) * 1.6; p.y += sin(uTime * 0.7 + aSeed * 30.0) * 0.9; p.z += cos(uTime * (0.25 + aSeed * 0.7) + aSeed * 80.0) * 1.6;
-      vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = (60.0 + aSeed * 90.0) / -mv.z * (0.6 + 0.4 * sin(uTime * 2.0 + aSeed * 90.0)); }`,
+      vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = (90.0 + aSeed * 150.0) / -mv.z * (0.6 + 0.4 * sin(uTime * 2.0 + aSeed * 90.0)); }`,
     fragmentShader: `varying float vS; uniform float uNight; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d); vec3 c = mix(vec3(0.3, 1.0, 0.8), vec3(1.0, 0.85, 0.4), step(0.6, vS)); c = mix(c, vec3(0.8, 0.5, 1.0), step(0.88, vS)); gl_FragColor = vec4(c * a * 1.6, a * mix(0.25, 1.0, uNight)); }`,
   });
   const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; G.scene.add(pts);
+}
+
+/* ───── 풀밭 : 내 주변 70m 를 따라다니는 풀잎 (바람 · 밟힘 · 발자국 빛) ───── */
+function grass() {
+  const n = W.res + 1, data = new Uint16Array(n * n * 4), H = THREE.DataUtils.toHalfFloat;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const x = -W.half + i * W.cell, z = -W.half + j * W.cell, h = W.hmap[j * n + i];
+    let m = 1; if (h < W.water + 0.6) m = 0; m *= clamp(1 - (slopeAt(x, z) - 0.3) * 5, 0, 1); m *= clamp((dist2(x, z, W.arena.x, W.arena.z) - W.arena.r * 0.8) / 30, 0, 1); m *= clamp(1.25 - h / 120, 0, 1);
+    const k = (j * n + i) * 4; data[k] = H(h); data[k + 1] = H(m); data[k + 2] = H(clamp((fbm(x * 0.02 + 90, z * 0.02 + 15, 2) - 0.5) * 4, 0, 1)); data[k + 3] = H(1); }
+  const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat, THREE.HalfFloatType); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true; W.heightTex = tex;
+  const N = G.mobile ? 45000 : Math.round(230000 * G.quality), TILE = G.mobile ? 44 : 64, r = rng(4242), off = new Float32Array(N * 3), rnd = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { off[i * 3] = r() * TILE; off[i * 3 + 1] = r() * TILE; off[i * 3 + 2] = r(); rnd[i * 3] = r(); rnd[i * 3 + 1] = r(); rnd[i * 3 + 2] = r(); }
+  const geo = new THREE.InstancedBufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -0.8, 0.5, 0, 0.8, 0.5, 0, 0, 1, 0]), 3)); geo.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
+  geo.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 3)); geo.setAttribute('aRnd', new THREE.InstancedBufferAttribute(rnd, 3)); geo.instanceCount = N;
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide, fog: true,
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTile: { value: TILE }, uHalf: { value: W.half }, uSize: { value: W.size } }]),
+    vertexShader: `uniform sampler2D uH; uniform vec3 uP; uniform float uTime, uTile, uHalf, uSize, uNight; uniform vec3 uSteps[16]; attribute vec3 aOff, aRnd; varying float vT, vGlow, vK, vFade; varying vec2 vR;
+      #include <fog_pars_vertex>
+      void main(){
+        vec2 base = mod(aOff.xy - uP.xz, uTile) - uTile * 0.5 + uP.xz; vec4 hm = texture2D(uH, (base + uHalf) / uSize);
+        float d = distance(base, uP.xz), fade = smoothstep(uTile * 0.5, uTile * 0.3, d) * smoothstep(0.35, 0.6, hm.g + aOff.z * 0.25);
+        float tall = (0.20 + aRnd.x * aRnd.x * 0.42 + hm.b * 0.22) * fade, t = position.y; vT = t; vR = aRnd.yz; vFade = fade; vK = hm.b;
+        float a = aRnd.y * 6.2832; vec2 dir = vec2(cos(a), sin(a)); vec3 p = vec3(base.x, hm.r - 0.03, base.y);
+        p.xz += dir * position.x * (1.0 - t * 0.85) * 0.034 * (0.7 + aRnd.x * 0.7);
+        float wind = sin(uTime * 1.5 + base.x * 0.31 + base.y * 0.23) * 0.55 + sin(uTime * 2.9 + base.x * 0.83 - base.y * 0.6) * 0.22;
+        vec2 bend = vec2(0.75, 0.4) * wind * 0.5 + dir * 0.35;
+        vec2 away = base - uP.xz; float pd = length(away); bend += away / (pd + 0.001) * smoothstep(1.7, 0.15, pd) * 1.1;
+        float sg = 0.0; for (int i = 0; i < 8; i++) { float age = uTime - uSteps[i].z; if (age > 0.0 && age < 5.0) { float sd = distance(base, uSteps[i].xy); sg += (smoothstep(1.5, 0.0, sd) + smoothstep(0.6, 0.0, abs(sd - age * 2.6)) * 0.8) * exp(-age * 1.0); } }
+        vGlow = sg;
+        p.xz += bend * t * t * tall; p.y += t * tall * (1.0 - 0.3 * min(1.0, length(bend)) * t);
+        vec4 mvPosition = viewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `uniform float uNight, uTime; varying float vT, vGlow, vK, vFade; varying vec2 vR;
+      #include <fog_pars_fragment>
+      void main(){
+        if (vFade < 0.02) discard;
+        vec3 tip = mix(vec3(0.035, 0.20, 0.13), vec3(0.03, 0.22, 0.24), vR.y) * (0.7 + 0.6 * fract(vR.x * 13.0)); tip = mix(tip, vec3(0.30, 0.22, 0.55), smoothstep(0.55, 0.9, vK) * 0.5);
+        vec3 c = mix(vec3(0.006, 0.035, 0.04), tip, vT * vT) * mix(1.5, 0.75, uNight);
+        float lum = step(0.972, vR.y) + step(0.992, vR.x) * 1.0;                       // 스스로 빛나는 풀잎
+        vec3 gc = mix(vec3(0.15, 1.0, 0.85), vec3(0.95, 0.35, 1.0), step(0.5, fract(vR.x * 7.0)));
+        c += gc * lum * vT * (0.9 + 0.5 * sin(uTime * 2.0 + vR.x * 40.0)) * uNight;
+        c += vec3(0.2, 1.0, 0.9) * vGlow * vT * 1.3;                                      // 발자국 빛
+        c += vec3(0.03, 0.40, 0.36) * vK * vT * vT * 0.3 * uNight;
+        gl_FragColor = vec4(c, 1.0);
+        #include <fog_fragment>
+      }`,
+  });
+  Object.assign(mat.uniforms, { uH: { value: tex }, uP: W.uniforms.uP, uTime: W.uniforms.uTime, uNight: W.uniforms.uNight, uSteps: W.uniforms.uSteps });
+  const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; m.name = 'grass'; G.scene.add(m); W.grassMesh = m; W.grassN = N;
+}
+export function stepGlow(x, z) { const a = W.uniforms.uSteps.value[W.stepI = (W.stepI + 1) % 8]; a.set(x, z, W.uniforms.uTime.value); }
+
+/* ───── 거대한 나무와 빛나는 덩굴 · 먼 하늘의 떠 있는 바위 ───── */
+function giants() {
+  const r = rng(808), spots = [[-58, -74, 13], [150, 60, 11], [-170, 170, 15], [40, -330, 12], [-250, -120, 14], [360, 330, 12], [-420, 250, 13]], b = bounds('island_tree_02'), pos = [], seed = [];
+  const list = spots.filter(([x, z]) => hAt(x, z) > W.water + 1).map(([x, z, s]) => ({ x, z, y: hAt(x, z) - 0.5, s, ry: r() * 6.28 }));
+  scatter('island_tree_02', list, { shadow: true, glow: 0x35e0c0, leafOnly: true, gk: 0.9, max: 1400 });
+  for (const t of list) { W.colliders.push({ x: t.x, z: t.z, r: 1.1 * t.s, big: 1, h: 60 });
+    const R = b.size.x * 0.42 * t.s, top = b.size.y * t.s;
+    for (let k = 0; k < 90; k++) { const a = r() * 6.283, rr = Math.sqrt(r()) * R, ax = t.x + Math.cos(a) * rr, az = t.z + Math.sin(a) * rr, ay = t.y + top * (0.5 + r() * 0.3), len = 5 + r() * (top * 0.38), n = 9 + Math.floor(len * 0.9), sd = r();
+      for (let i = 0; i < n; i++) { pos.push(ax, ay - (i / n) * len, az); seed.push(sd, i / n, len); } } }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aS', new THREE.Float32BufferAttribute(seed, 3));
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uTime: W.uniforms.uTime, uNight: W.uniforms.uNight },
+    vertexShader: `attribute vec3 aS; uniform float uTime; varying float vA; varying float vS; void main(){ vec3 p = position; float sw = aS.y * aS.y * aS.z * 0.12; p.x += sin(uTime * 0.7 + aS.x * 40.0 + aS.y * 2.0) * sw; p.z += cos(uTime * 0.55 + aS.x * 70.0 + aS.y * 1.6) * sw;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; float pulse = 0.5 + 0.5 * sin(uTime * 1.4 - aS.y * 7.0 + aS.x * 30.0); vA = (0.35 + 0.65 * pulse) * smoothstep(0.0, 0.08, aS.y); vS = aS.x; gl_PointSize = clamp((70.0 + 90.0 * pulse) / -mv.z, 1.5, 22.0); }`,
+    fragmentShader: `varying float vA; varying float vS; uniform float uNight; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d); vec3 c = mix(vec3(0.35, 1.0, 0.9), vec3(0.85, 0.55, 1.0), step(0.72, vS)); gl_FragColor = vec4(c * a * vA * 1.5, a * vA * mix(0.3, 1.0, uNight)); }` });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; G.scene.add(pts);
+  // 먼 하늘의 떠 있는 바위 (올라갈 수 없는 배경)
+  const far = []; for (let k = 0; k < 16; k++) { const a = r() * 6.283, d = 260 + r() * 520, x = Math.cos(a) * d, z = Math.sin(a) * d; far.push({ x, z, y: Math.max(hAt(x, z), 0) + 110 + r() * 170, s: 0.5 + r() * 1.3, ry: r() * 6.28 }); }
+  const cb = bounds('namaqualand_cliff_02'), k0 = 46 / Math.max(cb.size.x, cb.size.z);
+  for (const p of parts('namaqualand_cliff_02')) { const mm = p.mat.clone(); mm.side = THREE.DoubleSide; mm.envMapIntensity = 0.4; const im = new THREE.InstancedMesh(p.geo, mm, far.length * 2); const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Euler();
+    far.forEach((f, i) => { for (let u = 0; u < 2; u++) { E.set(0, f.ry + u * 2.1, 0); Q.setFromEuler(E); const s = k0 * f.s; S.set(s * (u ? 0.8 : 1), s * (u ? 0.7 : -1.7), s * (u ? 0.8 : 1)); T.set(f.x, f.y + (u ? 0 : -2), f.z); M.compose(T, Q, S).multiply(p.m); im.setMatrixAt(i * 2 + u, M); } });
+    im.frustumCulled = false; G.scene.add(im); }
 }
 
 /* ───── 충돌 격자 ───── */
@@ -272,7 +366,7 @@ function lights() {
 }
 const cNightFog = new THREE.Color(0x0c2c3c), cDuskFog = new THREE.Color(0xd79a9a), cNightSun = new THREE.Color(0xa9c6ff), cDuskSun = new THREE.Color(0xffc9a0), tmp = new THREE.Color();
 export function updateWorld(dt, focus) {
-  W.uniforms.uTime.value += dt;
+  W.uniforms.uTime.value += dt; if (focus) W.uniforms.uP.value.copy(focus);
   const cyc = (W.uniforms.uTime.value / 420 + 0.35) % 1, night = clamp(0.9 + 0.16 * Math.sin(cyc * Math.PI * 2 + 0.6), 0.72, 1);    // 대부분 밤, 가끔 황혼
   W.uniforms.uNight.value = night;
   G.scene.fog.color.copy(tmp.copy(cDuskFog).lerp(cNightFog, night)); sun.color.copy(tmp.copy(cDuskSun).lerp(cNightSun, night)); sun.intensity = lerp(3.4, 1.5, night);
@@ -283,5 +377,5 @@ export function updateWorld(dt, focus) {
 }
 
 export function buildWorld() {
-  buildHeight(); lights(); sky(); terrain(); water(); islands(); vegetation(); resources(); motes(); buildGrid();
+  buildHeight(); lights(); sky(); terrain(); water(); islands(); vegetation(); giants(); resources(); grass(); motes(); buildGrid();
 }
