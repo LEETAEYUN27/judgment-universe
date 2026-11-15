@@ -31,3 +31,9 @@
 - what: 구름 땅 · 구름고래 표면 질감 (assets/tex/wool_boucle_*, 모델에 포함된 leather_white)
   source: https://polyhaven.com/textures
   license: CC0
+- what: 배경음악 4곡 (assets/music/*.mp3, 96kbps로 다시 인코딩 · 음량 맞춤)
+  source: https://opengameart.org — r1 「Dryad's Dream (loop)」 Tsorthan Grove (/content/dryads-dream) · r2 「Iridescent Deep (loop)」 Tsorthan Grove (/content/iridescent-deep) · r3 「Entering the Volcano」 Umplix (/content/ambience-of-a-fallen-age) · boss 「Epic Boss Battle」 Juhani Junkala / SubspaceAudio (/content/boss-battle-music)
+  license: CC0 (각 페이지의 License 항목 확인, 2026-11-15)
+- what: 3지역 소품 9종 (assets/ember/*.glb : 불씨 나무 2종 · 현무암 기둥 · 흑요석 결정 · 불꽃 수정 · 불백합 · 가시덤불 · 분기공 · 거대한 갈비뼈) · 용암지네 2판 (assets/mon/bul.glb, tools/bul2.py)
+  source: 이 프로젝트에서 Blender(bpy)로 직접 모델링 — tools/ember.py. 표면 질감은 Poly Haven CC0 (burned_ground_01, rock_boulder_cracked, mud_cracked_dry_03, dark_rock)
+  license: 자체 제작 + CC0 질감

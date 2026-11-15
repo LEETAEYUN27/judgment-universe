@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { I, initInput, consume, press } from './input.js';
 import { Player, TUNE } from './player.js';
 import { spawnMonsters } from './boss.js';
-import { initFx, updateFx, burst, ring, mark, number, sfx, audioOn } from './fx.js';
+import { initFx, updateFx, burst, ring, mark, number, sfx, audioOn, music, toggleMusic, musicState } from './fx.js';
 import { initLife, updateLife, nearest, interact, eat, tryBuild, canAfford, BUILD, ITEM, QUESTS, CHIEF, REGNAME, regionsOpen, travel, gateOpen, save, load, placeBuild } from './life.js';
 import { Net } from './net.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -48,7 +48,7 @@ async function boot() {
 }
 function startUI() {
   if (G.region === 2) { $('#chap').textContent = '제2장 · 구름고래 하늘바다'; $('#lore').textContent = '머리 위에는 바다가 걸려 있고 발밑은 뭉게구름인 거꾸로 된 세상. 산호가 나무처럼 자라고 해파리가 등불처럼 떠다닌다. 그 하늘 바다에서, 등에 산호를 인 구름고래 「먹구름」이 내려와 모두를 통째로 들이마시려 한다.'; }
-  if (G.region === 3) { $('#chap').textContent = '제3장 · 잠든 화산섬'; $('#lore').textContent = '바다 한가운데 솟은 검은 화산섬. 오래 잠들어 있던 분화구에서 용암지네 「불등」이 깨어나 밤마다 불비를 내린다. 온천에서 몸을 추스르고, 용암 웅덩이를 피해 분화구 바닥까지 내려가야 한다.'; }
+  if (G.region === 3) { $('#chap').textContent = '제3장 · 불씨의 섬'; $('#lore').textContent = '용암 바다 위에 떠 있는 검은 섬. 땅에는 용암이 강처럼 흐르고, 나무는 잎 대신 불씨를 달고 있다. 화산 분화구에서 깨어난 용암지네 「불등」이 밤마다 불비를 내린다. 용암을 건너뛰어 분화구 바닥까지 내려가야 한다.'; }
   { const row = $('#regRow'); row.innerHTML = ''; const open = (() => { try { return regionsOpen(); } catch (e) { return [1]; } })().filter(r => r !== G.region);
     if (open.length) { row.style.display = 'flex'; for (const to of open) { const b = document.createElement('button'); b.className = 'btn alt'; b.textContent = `제${to}장 「${REGNAME[to]}」`; b.onclick = () => { try { localStorage.setItem('mochi_region', String(to)); } catch (e) { } const q = new URLSearchParams(location.search); q.delete('map'); const qs = q.toString(); location.href = location.pathname + (qs ? '?' + qs : ''); }; row.appendChild(b); } } }
   const box = $('#chars'); CHARS.forEach(([k, nm], i) => { const b = document.createElement('button'); b.innerHTML = `<img src="assets/ui/${k}.png" alt="">${nm}`; b.className = i === 0 ? 'on' : ''; b.onclick = () => { kind = k; box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }; box.appendChild(b); });
@@ -103,6 +103,7 @@ function events() {
     if (e.st === 'rain' && w && w.hazard.rocks) { for (const q of w.hazard.rocks) burst(q[0], hAt(q[0], q[1]) + 1, q[1], 26, 0xff7a1a, 9, 0.7, 9, 14, 0.9); sfx.erupt(); if (G.me && near < 70) G.me.shake = Math.max(G.me.shake, 0.6); }
   });
   on('bossStep', p => { if (!G.me) return; const d = dist2(G.me.pos.x, G.me.pos.z, p.x, p.z); if (d < 45) { G.me.shake = Math.max(G.me.shake, 0.3 * (1 - d / 45)); sfx.stomp(); burst(p.x, p.y + 0.3, p.z, 5, 0x9a8a70, 3, 0.5, 2, 6, 0.6); } });
+  on('bossBurn', b => { mark(b.x, b.z, 3.0, 5.5, 0xff6a1a); burst(b.x, hAt(b.x, b.z) + 0.4, b.z, 10, 0xff7a1a, 3, 0.4, 5, 6, 0.8); });
   on('bossRocks', e => { for (const q of e.rocks) mark(q[0], q[1], 4.6, e.t); sfx.tell(); });
   on('bossPhase', n => toast(G.region === 3 ? (n === 2 ? '불등이 더 자주 불비를 뿜음!' : '불등이 미쳐 날뜀!') : G.region === 2 ? (n === 2 ? '먹구름이 하늘 높이 솟구쳐 내리꽂기 시작함!' : '먹구름이 미쳐 날뜀!') : (n === 2 ? '아귀룡이 땅속으로 파고들기 시작함!' : '아귀룡이 미쳐 날뜀!')));
   on('bossDead', e => { if (e.boss) { G.stats.bossDead = true; sfx.win(); toast(G.boss.name + '을(를) 쓰러뜨림! ' + CHIEF + '에게 돌아가자'); for (let i = 0; i < 6; i++) setTimeout(() => burst(e.pos.x + (Math.random() - 0.5) * 20, e.pos.y + 4, e.pos.z + (Math.random() - 0.5) * 20, 60, [0xffd84a, 0x7affd8, 0xff8ad0][i % 3], 14, 0.8, 12, 8, 1.6), i * 350); if (G.me) G.me.ch.st.cheer = 3; }
@@ -114,6 +115,7 @@ function events() {
   on('land', e => { stepGlow(e.pos.x, e.pos.z); sfx.land(); burst(e.pos.x, e.pos.y + 0.1, e.pos.z, Math.min(16, 4 + e.v), 0xc8c0a0, 3, 0.45, 1.5, 6, 0.5); }); on('step', p => { sfx.step(); stepGlow(p.x, p.z); }); on('pad', p => { sfx.pad(); burst(p.x, p.y + 1, p.z, 50, 0x35ffd0, 9, 0.6, 14, 4, 1.1); toast('바람꽃을 타고 날아오름!'); });
   on('hitstop', t => { hitstop = Math.max(hitstop, t); }); on('toast', toast); on('inv', invUI); on('quest', questUI); on('roster', () => { const n = G.net ? G.net.count : 1; $('#roomN').textContent = n; if (isHost() && G.boss.alive) { const b = G.boss, base = 2600, nm = Math.round(base * (1 + 0.6 * (n - 1))); b.hp = Math.round(b.hp / b.maxHp * nm); b.maxHp = nm; } });
   on('dialog', openDialog);
+  { const mb = $('#musicBtn'); const show = () => { mb.textContent = musicState() ? '🎵' : '🔇'; }; show(); mb.onclick = () => { toggleMusic(); show(); mb.blur(); }; addEventListener('keydown', e => { if (e.code === 'KeyM' && document.activeElement.tagName !== 'INPUT') { toggleMusic(); show(); } }); }
   on('say', m => { const r = G.others.get(m.id); if (!r) return; bubble(r.pos, SAY[m.i]); toast((r.ch.tagName || '친구') + ' : ' + SAY[m.i]); if (m.i === 0 || m.i === 3) r.ch.st.cheer = 1; });
   on('gate', () => {
     const open = regionsOpen().filter(r => r !== G.region);
@@ -150,7 +152,7 @@ function questDir() {
   const f = G.camera.getWorldDirection(new THREE.Vector3()), a = Math.atan2(f.z * dx - f.x * dz, f.x * dx + f.z * dz);
   el.style.display = 'flex'; $('#qArrow').style.transform = `rotate(${(-a * 57.3).toFixed(0)}deg)`; $('#qDist').textContent = `${qT.n} ${Math.round(d)}걸음`;
 }
-function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '잠든 화산섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 하늘바다을 지켜 냄. 바람문으로 잠든 화산섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 하늘바다에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
+function questUI() { const q = QUESTS[G.quest]; if (!q) { $('#qTitle').textContent = '분지의 수호자'; $('#qGoal').textContent = G.region === 3 ? '불씨의 섬을 지켜 냄. 다음 지역 준비 중' : G.region === 2 ? '구름고래 하늘바다을 지켜 냄. 바람문으로 불씨의 섬에 갈 수 있음' : '별꽃 분지를 지켜 냄. 바람문으로 구름고래 하늘바다에 갈 수 있음'; $('#qHint').textContent = ''; return; } $('#qTitle').textContent = q.title; $('#qGoal').textContent = G.questProg === 0 ? CHIEF + '과 이야기하기' : q.goal; $('#qHint').textContent = G.questProg === 1 && q.check() ? '✔ 완료! 촌장에게 돌아가기' : ''; }
 // 한마디 : 숫자 1~4 (머리 위 말풍선, 같은 방 친구에게도 보임)
 const SAY = ['👋 안녕!', '🆘 도와줘!', '➡️ 이리 와!', '😆 ㅋㅋㅋ']; let sayT = 0;
 function bubble(pos, text) { number(pos.x, pos.y + 2.6, pos.z, text, 'say'); }
@@ -164,7 +166,8 @@ function dlgNext() { if (!dlg) return; if (dlg.i < dlg.lines.length - 1) { dlg.i
 function closeDialog() { dlg = null; $('#dialog').style.display = 'none'; G.ui.blocked = $('#build').style.display === 'block'; consume('interact'); consume('jump'); consume('attack'); }
 function hud() {
   const me = G.me; $('#hpBar').style.transform = `scaleX(${clamp(me.hp / me.maxHp, 0, 1)})`; $('#stBar').style.transform = `scaleX(${me.stam / 100})`; $('#meHp').textContent = Math.ceil(me.hp) + ' / ' + me.maxHp;
-  const b = G.boss, show = b.alive && b.st !== 'sleep' && dist2(me.pos.x, me.pos.z, b.head.x, b.head.z) < 160; $('#boss').style.display = show ? 'block' : 'none'; if (show) $('#bossBar').style.transform = `scaleX(${b.hp / b.maxHp})`;
+  const b = G.boss, show = b.alive && b.st !== 'sleep' && dist2(me.pos.x, me.pos.z, b.head.x, b.head.z) < 160;
+  { const want = show ? 'boss' : 'r' + G.region; if (want !== G.musicKey && (G.frame & 15) === 0) { G.musicKey = want; music(want, want === 'boss' ? 0.5 : 0.42); } } $('#boss').style.display = show ? 'block' : 'none'; if (show) $('#bossBar').style.transform = `scaleX(${b.hp / b.maxHp})`;
   const p = $('#prompt'); if (target && !G.ui.blocked) { p.style.display = 'block'; p.innerHTML = (G.mobile ? '' : '<kbd>E</kbd>') + target.label; } else p.style.display = 'none';
   if (G.questProg === 1 && (G.frame & 63) === 0) questUI();
   questDir();

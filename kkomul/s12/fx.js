@@ -34,10 +34,23 @@ export function number(x, y, z, text, cls = '') {
 }
 /* 소리 : 받아 둔 음원이 없어 웹 오디오 합성음으로 대체 (인계 카드에 명시) */
 let ac = null, master = null;
-export function audioOn() { if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination); ambience(); } catch (e) { } }
+export function audioOn() { if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination); musicBus = ac.createGain(); musicBus.gain.value = musicOn ? 1 : 0; musicBus.connect(ac.destination); } catch (e) { } }
 function tone(f0, f1, dur, type = 'sine', vol = 0.3, delay = 0) { if (!ac) return; const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05); }
 function noise(dur, f, q = 1, vol = 0.3, delay = 0, f1 = null) { if (!ac) return; const t = ac.currentTime + delay, n = ac.sampleRate * dur, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const s = ac.createBufferSource(); s.buffer = b; const fl = ac.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.setValueAtTime(f, t); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur); fl.Q.value = q; const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); s.connect(fl); fl.connect(g); g.connect(master); s.start(t); }
 function ambience() { const notes = [220, 277.2, 329.6, 415.3, 493.9, 554.4]; const play = () => { if (!ac) return; const f = notes[Math.floor(Math.random() * notes.length)] * (Math.random() < 0.3 ? 2 : 1); tone(f, f, 3.5, 'sine', 0.035); tone(f * 1.5, f * 1.5, 3.0, 'triangle', 0.012, 0.3); setTimeout(play, 1400 + Math.random() * 2600); }; play(); }
+/* 배경음악 : 지역마다 다른 곡, 보스전에는 전투곡 (모두 CC0 공개 음원 — assets/provenance.yaml) */
+let musicBus = null, musicOn = true, curKey = null, curNode = null; const bufs = {}; try { musicOn = localStorage.getItem('mochi_music') !== '0'; } catch (e) { }
+export async function music(key, vol = 0.42) {
+  if (!ac || key === curKey) return; curKey = key; const t0 = ac.currentTime;
+  if (curNode) { const o = curNode; o.g.gain.cancelScheduledValues(t0); o.g.gain.setValueAtTime(o.g.gain.value, t0); o.g.gain.linearRampToValueAtTime(0.0001, t0 + 2.2); setTimeout(() => { try { o.s.stop(); } catch (e) { } }, 2400); curNode = null; }
+  try {
+    if (!bufs[key]) bufs[key] = fetch(`assets/music/${key}.mp3`).then(r => r.arrayBuffer()).then(a => ac.decodeAudioData(a));
+    const b = await bufs[key]; if (curKey !== key) return;
+    const s = ac.createBufferSource(), g = ac.createGain(); s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; g.gain.setValueAtTime(0.0001, ac.currentTime); g.gain.linearRampToValueAtTime(vol, ac.currentTime + 2.5); s.connect(g); g.connect(musicBus); s.start(); curNode = { s, g };
+  } catch (e) { console.warn('음악 불러오기 실패', key, e); bufs[key] = null; }
+}
+export function toggleMusic() { musicOn = !musicOn; try { localStorage.setItem('mochi_music', musicOn ? '1' : '0'); } catch (e) { } if (musicBus) musicBus.gain.linearRampToValueAtTime(musicOn ? 1 : 0, ac.currentTime + 0.4); return musicOn; }
+export const musicState = () => musicOn;
 export const sfx = {
   jump: () => tone(380, 720, 0.13, 'sine', 0.18), jump2: () => { tone(520, 980, 0.12, 'sine', 0.16); tone(780, 1300, 0.1, 'triangle', 0.08, 0.04); }, dash: () => noise(0.22, 900, 0.8, 0.28, 0, 3000), land: () => noise(0.12, 180, 1, 0.3), step: () => noise(0.05, 500 + Math.random() * 300, 2, 0.05),
   swing: () => noise(0.14, 1400, 1.2, 0.2, 0, 500), hit: () => { noise(0.1, 320, 1.5, 0.45); tone(190, 70, 0.14, 'square', 0.12); }, hurt: () => { tone(300, 110, 0.3, 'sawtooth', 0.2); noise(0.2, 250, 1, 0.3); },

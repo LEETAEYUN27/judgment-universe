@@ -14,7 +14,8 @@ export class Wyrm {
     Object.assign(this, { id: 'boss', scale: 1, segs: 20, maxHp: 2600, home: W.arena, boss: true, name: '아귀룡' }, o);
     const S = this.scale; this.hp = this.maxHp; this.alive = true; this.spacing = 2.75 * S; this.rad = 1.9 * S;
     const src = G.assets[this.model || 'agwi']; this.group = new THREE.Group(); G.scene.add(this.group);
-    const mk = name => { const n = pick(src, name).clone(true); n.position.set(0, 0, 0); n.scale.setScalar(S); n.traverse(m => { if (m.isMesh) { m.castShadow = true; m.material = m.material.clone(); m.material.envMapIntensity = 0.4; if (this.model === 'gorae' && m.material.name === 'hide') { m.material.color.multiplyScalar(2.7); m.material.roughness = 0.6; m.material.envMapIntensity = 0.15; } } }); this.group.add(n); return n; };
+    const mk = name => { const n = pick(src, name).clone(true); n.position.set(0, 0, 0); n.scale.setScalar(S); n.traverse(m => { if (m.isMesh) { m.castShadow = true; m.material = m.material.clone(); m.material.envMapIntensity = 0.4; if (this.model === 'bul') { if (m.material.name === 'hide') m.material.color.multiplyScalar(0.75); if (m.material.name === 'plate') { m.material.color.multiplyScalar(4.6); m.material.roughness = 0.28; m.material.envMapIntensity = 0.9; } }
+      if (this.model === 'gorae' && m.material.name === 'hide') { m.material.color.multiplyScalar(2.7); m.material.roughness = 0.6; m.material.envMapIntensity = 0.15; } } }); this.group.add(n); return n; };
     this.headN = mk('head'); this.jawN = pick(this.headN, 'jaw'); this.segN = []; this.legs = []; this.mats = [];
     for (let i = 0; i < this.segs; i++) { const s = mk(this.fly && i === 2 && pick(src, 'segF') ? 'segF' : this.fly && (i % 3 === 0 || i === 4) && i < this.segs - 3 && pick(src, 'segC') ? 'segC' : 'seg'); const k = i < this.segs - 4 ? 1 - Math.abs(i - this.segs * 0.35) / this.segs * 0.55 : lerp(0.8, 0.35, (i - (this.segs - 4)) / 4); s.scale.setScalar(S * k); s.userData.k = k; this.segN.push(s); }
     this.tailN = mk('tail'); this.tailN.scale.setScalar(S * 0.5);
@@ -189,6 +190,10 @@ export class Wyrm {
     if (this.st === 'inhale' && !(pl.dashT > 0)) { const dx = mouth.x - p.x, dz = mouth.z - p.z, d = Math.hypot(dx, dz), a = Math.abs(angDiff(this.yaw, Math.atan2(-dx, -dz)));
       if (d < 46 * S && d > 1 && a < 0.75) { const pull = (this.boss ? 9.2 : 5) * (1 - d / (60 * S)) * G.dt; p.x += dx / d * pull; p.z += dz / d * pull; pl.pulled = 0.2; } }
     if (hz.rockOn && hz.rocks) for (const q of hz.rocks) if (Math.hypot(p.x - q[0], p.z - q[1]) < 4.6 && p.y < hAt(q[0], q[1]) + 6) { pl.damage(26, { x: q[0], z: q[1] }, 12); break; }
+    if (this.fire && this.boss) { const tr = this.burn || (this.burn = []);
+      if (this.st === 'charge') { const l = tr[tr.length - 1]; if (!l || Math.hypot(l.x - this.head.x, l.z - this.head.z) > 4.5) { const b = { x: this.head.x, z: this.head.z, t: G.time + 5.5 }; tr.push(b); emit('bossBurn', b); } }
+      while (tr.length && tr[0].t < G.time) tr.shift();
+      if (pl.inv <= 0) for (const b of tr) if (Math.hypot(p.x - b.x, p.z - b.z) < 3.0 && p.y < hAt(b.x, b.z) + 1.2 && G.time > b.t - 5.2) { pl.damage(12, b, 6); break; } }
     if (hz.contact) for (let i = 0; i < 6; i++) { const q = this.pts[i]; if (Math.hypot(p.x - q.x, p.z - q.z) < this.rad * 1.15 + 0.5 && p.y < q.y + this.rad + 1 && p.y > q.y - this.rad * 1.6 - 1) { pl.damage(30, q, 24); return; } }
     if (hz.erupt && Math.hypot(p.x - hz.erupt.x, p.z - hz.erupt.z) < 7.5 * S) { if (pl.damage(34, hz.erupt, 12)) pl.vel.y = 22; return; }
     if (this.ring) { const d = Math.hypot(p.x - this.ring.x, p.z - this.ring.z); if (Math.abs(d - this.ring.r) < 1.6 && p.y < hAt(p.x, p.z) + 1.5) pl.damage(this.boss ? 22 : 8, this.ring, 10); }
